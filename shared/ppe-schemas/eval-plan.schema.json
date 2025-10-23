@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.lane2.ai/ppe/eval-plan.schema.json",
+  "title": "PPE Evaluation Plan",
+  "type": "object",
+  "required": ["eval_plan_id", "sequence", "hash"],
+  "properties": {
+    "eval_plan_id": {"type": "string"},
+    "sequence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["stage"],
+        "properties": {
+          "stage": {"type": "string"},
+          "predicate": {"type": "string"},
+          "ops": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "hash": {"type": "string"}
+  }
+}

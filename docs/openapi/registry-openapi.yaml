@@ -1,10 +1,144 @@
-openapi: 3.0.3
+openapi: 3.1.0
 info:
-  title: RTGF Registry API (Draft)
-  version: 0.1.0
+  title: RTGF Authoritative Registry API
+  version: "1.0.0-draft"
   description: |
-    Reference endpoints for RTGF-authoritative registries. This document is a stub and will be
-    expanded with full schemas for /rmt, /imt, /revocations, /transparency, and admin submission flows.
+    Simplified outline of the RTGF registry endpoints. Schemas will be expanded as the
+    implementation matures.
 servers:
   - url: https://reg.example
-paths: {}
+paths:
+  /.well-known/rtgf:
+    get:
+      summary: Registry metadata
+      responses:
+        '200':
+          description: Metadata object
+          content:
+            application/json:
+              schema:
+                type: object
+        '4XX':
+          description: Problem Details
+          content:
+            application/problem+json:
+              schema:
+                type: object
+  /rmt/{jurisdiction}/{domain}:
+    get:
+      summary: Retrieve latest RMT token
+      parameters:
+        - name: jurisdiction
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: domain
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Signed RMT object
+          content:
+            application/imt-rmt+json:
+              schema:
+                type: object
+        '4XX':
+          description: Problem Details
+          content:
+            application/problem+json:
+              schema:
+                type: object
+  /imt/{corridor}/{domain}:
+    get:
+      summary: Retrieve latest IMT token
+      parameters:
+        - name: corridor
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: domain
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Signed IMT object
+          content:
+            application/imt-rmt+json:
+              schema:
+                type: object
+        '4XX':
+          description: Problem Details
+          content:
+            application/problem+json:
+              schema:
+                type: object
+  /revocations:
+    get:
+      summary: Retrieve revocation status list segment or delta
+      parameters:
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [rmt, imt]
+        - name: since
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Signed status list payload
+          content:
+            application/json:
+              schema:
+                type: object
+  /transparency:
+    get:
+      summary: Retrieve transparency log entries
+      parameters:
+        - name: since
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: JSON array of log entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+  /admin/submit:
+    post:
+      summary: Submit signed token bundle (mTLS required)
+      security:
+        - mtls: []
+      requestBody:
+        required: true
+        content:
+          application/jose+json:
+            schema:
+              type: object
+      responses:
+        '202':
+          description: Accepted; publication in progress
+        '4XX':
+          description: Problem Details
+          content:
+            application/problem+json:
+              schema:
+                type: object
+components:
+  securitySchemes:
+    mtls:
+      type: mutualTLS

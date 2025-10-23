@@ -1,0 +1,11 @@
+{
+  "jurisdiction_path": ["EU", "SG"],
+  "domain": "payments_aml",
+  "flow": "cross_border",
+  "amount": {"currency": "EUR", "value": 1200},
+  "counterparty_country": "SG",
+  "transfer_mechanism": "SCC",
+  "sanctions_dataset_hash": "sha256:abc...",
+  "kyc_status": "verified_basic",
+  "customer_risk": "LOW"
+}

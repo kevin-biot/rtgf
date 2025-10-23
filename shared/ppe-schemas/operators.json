@@ -1,0 +1,7 @@
+{
+  "comparators": ["EQUALS", "NOT_EQUALS", "GT", "GTE", "LT", "LTE", "IN", "MATCHES_REGEX"],
+  "boolean": ["AND", "OR", "NOT"],
+  "numeric": ["ADD", "SUB", "MUL", "DIV"],
+  "setmap": ["HAS_KEY", "HAS_VALUE", "LENGTH", "SUBSET_OF"],
+  "special": ["LOOKUP", "NOW", "AGE_LT_DAYS"]
+}

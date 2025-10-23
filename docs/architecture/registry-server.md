@@ -25,6 +25,17 @@ Keys: issuer signing key (Ed25519 MTI, HSM-backed), registry signing key, regula
 - `GET /revocations?type=<rmt|imt>&since=...`: signed status list segments and Merkle checkpoints.
 - `GET /transparency`, `GET /transparency/proof`: append-only log queries and proofs.
 
+High-level flow:
+
+```
+nightly ─► rtgf-compiler ─► POST /admin/submit (mTLS bundle)
+           verifies snapshots │
+           builds tokens       ▼
+registry ─► validates, logs, publishes
+routers  ─► GET /rmt /imt /revocations /transparency
+             verify signatures, cache, enforce fail-closed
+```
+
 ## 5. Submission API (mTLS)
 - `POST /admin/submit`: accepts compiler bundle with tokens, manifests, issuer claims.
 - Registry verifies schema, signatures, timestamps, corridor format, and optional quorum requirements before publication.
@@ -43,5 +54,23 @@ Keys: issuer signing key (Ed25519 MTI, HSM-backed), registry signing key, regula
 - Structured logs (trace ID, JTI, result codes) without PII.
 - Key rotations logged to transparency; configuration changes tracked in git/ADR.
 - High availability via hot/warm replicas and immutable transparency store.
+
+## 8. Deployment Quickstart (Draft)
+
+```bash
+# generate signing keys
+docker run lane2/rtgf-registry keygen --kid r1
+
+# start registry via Helm (example values)
+helm install lane2-registry ./helm \
+  --set registry.domain=reg.eu.example \
+  --set hsm.kmsProvider=aws
+
+# publish JWKS and metadata
+curl https://reg.eu.example/.well-known/rtgf | jq '.'
+
+# routers fetch latest IMT
+curl -s https://reg.eu.example/imt/EU-SG/ai | jq '.'
+```
 
 Refer to `docs/openapi/registry-openapi.yaml` for the evolving OpenAPI description of the endpoints.
