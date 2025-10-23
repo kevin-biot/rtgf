@@ -1,0 +1,7 @@
+# Build artifacts
+rtgf-compiler/bin/
+rtgf-registry/bin/
+rtgf-cli/bin/
+rtgf-verify-lib/node_modules/
+*.log
+*.tmp
