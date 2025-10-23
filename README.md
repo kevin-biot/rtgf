@@ -35,6 +35,8 @@ RTGF transforms *policy snapshots* published by regulators into signed, machine-
 | `shared/ppe-schemas/` | Shared JSON-Schema definitions (predicates, evaluation plans, operators). |
 | `examples/` | Sample policies and generated tokens (e.g., EU↔SG corridor). |
 | `docs/` | Architecture notes, ADRs, OpenAPI specs, policy source matrix, and Internet-Drafts. |
+| `docs/policy/` | Policy source ingestion matrix, big-picture workflow, developer guide. |
+| `docs/corridors/` | Corridor process, playbooks, templates, metrics, and workflow changelog. |
 
 ---
 
@@ -77,6 +79,11 @@ rtgf verify ./out/RMT-EU-AI-2025-10-22.json
   - `draft-aarp-00` — Autonomous Agent Routing Protocol
   - `draft-lane2-imt-rmt-00` — RMT/IMT Token Format
   - `draft-lane2-corridor-registry-00` — Corridor & Domain Naming Registry
+
+## 🧭 Additional References
+- `docs/policy/BIG_PICTURE.md` — end-to-end ingestion summary.
+- `docs/corridors/process/PROCESS_AND_MAPPING.md` — corridor S0–S7 workflow.
+- `docs/mandala/alignment.md` — Mandala proof interoperability guide.
 
 ---
 
