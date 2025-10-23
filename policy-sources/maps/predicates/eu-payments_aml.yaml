@@ -1,0 +1,26 @@
+predicate_catalog_id: predcat.eu.payments_aml.v1
+predicates:
+  - id: pred.data.transfer.mechanism.v1
+    applies_when: { jurisdiction_in: ["EU"], flow: "cross_border" }
+    inputs:
+      - { name: "transfer_mechanism", type: "string", required: true }
+    logic: { op: "IN", left: { var: "transfer_mechanism" }, right: ["SCC","DPF","ADEQUACY"] }
+    on_fail: { decision: "DENY", reason: "TRANSFER_MECHANISM_UNSUPPORTED" }
+
+  - id: pred.sanctions.public.v1
+    applies_when: { jurisdiction_in: ["EU"], flow: "cross_border" }
+    inputs:
+      - { name: "counterparty_country", type: "string", required: true }
+      - { name: "sanctions_dataset_hash", type: "sha256", required: true }
+    derive:
+      - { name: "sanctions_result", op: "LOOKUP", source: "SANCTIONS_API",
+          args: { dataset_hash: { var: "sanctions_dataset_hash" }, counterparty_country: { var: "counterparty_country" } } }
+    logic: { op: "EQUALS", left: { var: "sanctions_result" }, right: true }
+    on_fail: { decision: "DENY", reason: "SANCTIONS_HIT" }
+
+  - id: pred.aml.threshold.v1
+    applies_when: { jurisdiction_in: ["EU"] }
+    inputs:
+      - { name: "amount.value", type: "number", required: true }
+    logic: { op: "LTE", left: { var: "amount.value" }, right: 10000 }
+    on_fail: { decision: "PERMIT_WITH_CONTROLS", reason: "AMOUNT_REVIEW" }

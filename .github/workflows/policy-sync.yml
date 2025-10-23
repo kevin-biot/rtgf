@@ -1,0 +1,26 @@
+name: Policy Sources Sync
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch: {}
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Fetch sources
+        run: |
+          make -C policy-sources sync
+      - name: Normalize EU AML
+        run: |
+          make -C policy-sources normalize-eu-aml
+      - name: Commit provenance & normalized (if changed)
+        run: |
+          git config user.name "lane2-bot"
+          git config user.email "bot@lane2.ai"
+          git add policy-sources/registry/provenance.json policy-sources/normalized || true
+          git diff --cached --quiet || git commit -m "chore: nightly policy sync"
+          true

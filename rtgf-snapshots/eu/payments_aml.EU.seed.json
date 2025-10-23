@@ -1,0 +1,24 @@
+{
+  "@type": "policy:Snapshot",
+  "jurisdiction": "EU",
+  "domain": "payments_aml",
+  "effective_date": "2025-10-01T00:00:00Z",
+  "expires_at": "",
+  "normative_references": [
+    "CELEX:32018L1673",
+    "CELEX:32015R0847"
+  ],
+  "controls": {
+    "kyc_verification": "obligatory_before_onboarding",
+    "transaction_monitoring": "real_time"
+  },
+  "duties": {
+    "retain_records_years": 5,
+    "report_suspicious_activity": "24h_to_FIU"
+  },
+  "prohibitions": [
+    "transactions_with_designated_entities",
+    "anonymous_instruments_above_threshold"
+  ],
+  "policy_snapshot_hash": "sha256:placeholder"
+}

@@ -1,0 +1,10 @@
+domains:
+  ai:
+    description: Artificial Intelligence governance (EU AI Act etc.)
+    owner: DG-Connect
+  payments_aml:
+    description: AML/CFT, sanctions, funds transfer, KYC
+    owner: EBA / FATF
+  gdpr:
+    description: Data protection & cross-border transfer
+    owner: EDPB

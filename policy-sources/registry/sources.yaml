@@ -1,0 +1,81 @@
+# Canonical catalog of machine-readable and human sources for policy ingestion.
+# Each entry may produce multiple "snapshot" records after normalization.
+version: 1
+sources:
+  # --- BIS Project Mandala (informative alignment) ---
+  - id: mandala-core
+    name: BIS Innovation Hub — Project Mandala Core Report
+    kind: document
+    jurisdiction: INTL
+    domain_tags: [payments_aml, corridors, sanctions, policy_wrappers]
+    urls:
+      - https://example.bis.org/innovation-hub/mandala/report-oct-2024.pdf
+    license: public
+    ingest:
+      type: pdf
+      extract: ocr_if_needed
+      citation_required: true
+
+  - id: mandala-tech
+    name: BIS Mandala Technical Specifications (rules/proof/ccid)
+    kind: document
+    jurisdiction: INTL
+    domain_tags: [payments_aml, governance, zkp, mpc]
+    urls:
+      - https://example.bis.org/innovation-hub/mandala/tech-specs.zip
+    ingest:
+      type: archive
+      extract: pdf|md|json
+
+  # --- AML / Sanctions (EU baseline) ---
+  - id: eu-aml-amld6
+    name: EU AMLD6
+    kind: legislation
+    jurisdiction: EU
+    domain_tags: [payments_aml]
+    urls:
+      - https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32018L1673
+    ingest: { type: html, extract: text }
+
+  - id: eu-wire-transfer-reg
+    name: EU Regulation (EU) 2015/847 — Wire Transfer Reg
+    kind: legislation
+    jurisdiction: EU
+    domain_tags: [payments_aml, funds_transfer]
+    urls:
+      - https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32015R0847
+    ingest: { type: html, extract: text }
+
+  - id: eu-sanctions-map
+    name: EU Sanctions Map API
+    kind: dataset
+    jurisdiction: EU
+    domain_tags: [sanctions, screening]
+    urls:
+      - https://data.sanctionsmap.eu/api/v1/lists
+    ingest:
+      type: api
+      extract: json
+      hash_dataset: true
+
+  # --- AI Governance (EU AI Act) ---
+  - id: eu-ai-act
+    name: EU AI Act (2024/1689)
+    kind: legislation
+    jurisdiction: EU
+    domain_tags: [ai]
+    urls:
+      - https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32024R1689
+    ingest: { type: html, extract: text }
+
+  # --- Payments (PSD2/PSD3 drafts) ---
+  - id: eu-psd2
+    name: PSD2 Directive
+    kind: legislation
+    jurisdiction: EU
+    domain_tags: [payments, sca]
+    urls:
+      - https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32015L2366
+    ingest: { type: html, extract: text }
+
+# Add additional jurisdictions (SG MAS, US OFAC, UK HMT) in separate PRs.
