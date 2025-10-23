@@ -1,0 +1,10 @@
+openapi: 3.0.3
+info:
+  title: RTGF Registry API (Draft)
+  version: 0.1.0
+  description: |
+    Reference endpoints for RTGF-authoritative registries. This document is a stub and will be
+    expanded with full schemas for /rmt, /imt, /revocations, /transparency, and admin submission flows.
+servers:
+  - url: https://reg.example
+paths: {}

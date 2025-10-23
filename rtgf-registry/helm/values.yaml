@@ -1,0 +1,141 @@
+# Default values for RTGF registry reference chart.
+# Adjust per environment; see docs/deploy/aws-eks.md for AWS guidance.
+
+# ——— Global identity ————————————————————————————
+registry:
+  domain: "reg.example.com"        # FQDN for the RTGF registry
+  issuerDID: "did:web:reg.example.com"
+  jwks:
+    enabled: true
+    path: "/.well-known/jwks.json"
+
+# ——— Image & replicas ————————————————————————————
+image:
+  repository: ghcr.io/lane2-rtgf/registry
+  tag: "v1.0.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+# ——— Service & ingress ————————————————————————————
+service:
+  type: ClusterIP
+  port: 443
+  annotations: {}
+
+ingress:
+  enabled: true
+  className: "alb"               # AWS: alb | GCP: "gce" or "nginx"
+  tls:
+    enabled: true
+    secretName: "rtgf-tls"       # create via cert-manager/ACM/Google Managed Cert
+  annotations: {}
+  hosts:
+    - host: "reg.example.com"
+      paths:
+        - path: /
+          pathType: Prefix
+
+# ——— HSM/KMS key management —————————————————————
+crypto:
+  algorithm: "Ed25519"
+  provider: "aws-kms"             # aws-kms | gcp-kms | softhsm
+  awsKms:
+    keyArn: ""
+    region: ""
+  gcpKms:
+    keyVersion: ""
+  softHsm:
+    seedSecretRef: ""
+
+# ——— Admin (mTLS submission API) ——————————————————
+admin:
+  mtls:
+    enabled: true
+    caSecretName: "rtgf-admin-ca"
+  allowedKids:
+    - "issuer-key-r1"
+    - "issuer-key-r2"
+  cidrAllow: []
+
+# ——— Persistence (transparency log, revocations) ——————————
+persistence:
+  transparency:
+    enabled: true
+    size: 20Gi
+    storageClass: ""
+  revocations:
+    enabled: true
+    size: 5Gi
+    storageClass: ""
+
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: false
+
+# ——— Resources & autoscaling ————————————————————
+resources:
+  requests:
+    cpu: "250m"
+    memory: "512Mi"
+  limits:
+    cpu: "1"
+    memory: "2Gi"
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+# ——— Pod security, health, and disruption —————————————
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+
+livenessProbe:
+  httpGet: { path: /healthz, port: 8080 }
+  initialDelaySeconds: 10
+  periodSeconds: 10
+readinessProbe:
+  httpGet: { path: /readyz, port: 8080 }
+  initialDelaySeconds: 5
+  periodSeconds: 5
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# ——— Observability ———————————————————————————————
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+logging:
+  level: info
+
+# ——— Network policies (lockdown) ——————————————————
+networkPolicy:
+  enabled: true
+  egress:
+    - to: ["0.0.0.0/0"]
+  ingress:
+    - from: ["0.0.0.0/0"]
+
+# ——— RBAC & SA ————————————————————————————————
+serviceAccount:
+  create: true
+  name: "rtgf-registry"
+
+# ——— Feature flags ——————————————————————————————
+features:
+  transparencyLog: true
+  statusLists: true
+  wellKnown: true
+  problemDetails: true

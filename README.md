@@ -10,7 +10,8 @@ rtgf-snapshots/     # policy snapshot schemas and example inputs
 rtgf-registry/      # HTTP distribution service exposing /.well-known/rtgf, /rmt, /imt, /revocations, /transparency
 rtgf-cli/           # administrative CLI for signing snapshots, compiling tokens, publishing and revoking
 rtgf-verify-lib/    # verification SDKs (Go / TypeScript / Python adapters)
-examples/           # sample policies and generated tokens (e.g., EU↔SG AI corridor)
+examples/           # sample policies and generated tokens (e.g., EU↔SG corridor)
+docs/               # architecture notes, ADRs, OpenAPI specs, policy source matrix
 ```
 
 ## Status

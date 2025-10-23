@@ -5,7 +5,10 @@ Individual Submission – Lane2 Architecture
 
 Lane2 Architecture                                            October 13, 2025
 
-This Internet-Draft is submitted in full conformance with the provisions of BCP 78 and BCP 79.
+## Status of This Memo
+This Internet-Draft is submitted in full conformance with the provisions of BCP 78 and BCP 79. Internet-Drafts are working documents of the Internet Engineering Task Force (IETF). Note that other groups may also distribute working documents as Internet-Drafts. The list of current Internet-Drafts is at https://datatracker.ietf.org/drafts/current/.
+
+Internet-Drafts are draft documents valid for a maximum of six months and may be updated, replaced, or obsoleted by other documents at any time. It is inappropriate to use Internet-Drafts as reference material or to cite them other than as “work in progress.”
 
 Copyright (c) 2025 IETF Trust and the persons identified as the document authors. All rights reserved.
 
@@ -51,7 +54,7 @@ RTGF-REQ-001: Inputs **MUST** be signed policy snapshots (`policy.jsonld`) conta
 - `policy_snapshot_hash` (SHA-256 over canonicalised policy body)
 - Detached Ed25519 JWS signature by the regulatory authority DID/JWKS (or an authorised delegate)
 
-Snapshots **MUST** be canonicalised using RFC 8785 (JCS) before hashing and signing.
+Snapshots **MUST** be canonicalised using RFC 8785 (JCS) before hashing and signing. All timestamps in snapshots and derived tokens **MUST** use RFC 3339 format with UTC designator `Z`.
 
 ### 3.2 Compiler Requirements
 RTGF-REQ-002: Compilers **MUST** perform the following steps deterministically:
@@ -61,7 +64,7 @@ RTGF-REQ-002: Compilers **MUST** perform the following steps deterministically:
 4. For each ordered corridor `(A,B)`, compute IMT = INTERSECT(RMT_A, RMT_B) using the algorithm in Section 3.3.
 5. Attach `scope_hash = sha256(sorted(policy_hashes))` and `build_id` to each token.
 
-RTGF-REQ-003: Output tokens **MUST** be signed with Ed25519 JWS over canonicalised JSON and include:
+RTGF-REQ-003: Output tokens **MUST** be signed with Ed25519 JWS over canonicalised JSON and include JOSE headers with `alg=EdDSA` and a `kid` resolvable via the issuer JWKS. Tokens **MUST NOT** carry JOSE `crit` parameters unless this specification defines them. Each token **MUST** contain the following fields:
 - `rmt_id` or `imt_id`
 - `jurisdiction` or `corridor`
 - `domain`
@@ -76,7 +79,9 @@ RTGF-REQ-003: Output tokens **MUST** be signed with Ed25519 JWS over canonicalis
 
 RTGF-REQ-004: Tokens MAY include `signatures[]` for multi-signature endorsement. Verifiers **MUST** enforce the threshold defined in the token metadata or associated policy snapshot.
 
-RTGF-REQ-005: Compilation **MUST** be deterministic—identical inputs yield identical token bytes. Compilers **MUST** pin schema versions, sort all JSON object keys, and provide reproducible build manifests.
+RTGF-REQ-005: Compilation **MUST** be deterministic—identical inputs yield identical token bytes. Compilers **MUST** pin schema versions, sort all JSON object keys, include a `policy_max_ttl` value consistent with Section 5, and provide reproducible build manifests.
+
+`policy_max_ttl` denotes the maximum token lifetime advertised by the issuer and **MUST** align with freshness policies described in Section 5.
 
 ### 3.3 IMT Intersection Algorithm
 ```
@@ -94,7 +99,7 @@ INTERSECT(RMT_A, RMT_B):
 Conflicts **MUST** be recorded in `imt.effective_conflicts` for manual resolution or policy updates.
 
 ## 4. Distribution and Caching
-RTGF registries expose TLS 1.3 endpoints compatible with aARP discovery.
+RTGF registries expose TLS 1.3 endpoints compatible with aARP discovery and **MUST** follow the guidance in RFC 9325 when configuring TLS parameters, cipher suites, and certificate validation.
 
 RTGF-REQ-010: Servers **MUST** publish a well-known resource at `/.well-known/rtgf` containing registry roots, trust anchors, supported domains, and transparency log endpoints.
 
@@ -104,7 +109,7 @@ RTGF-REQ-011: The following endpoints **MUST** be implemented:
 - `GET /revocations` (status list or delta via `?since=`)
 - `GET /transparency?since=` (Merkle inclusion/consistency proofs)
 
-Responses **MUST** supply `Content-Type: application/imt-rmt+json`, `ETag`, and `Cache-Control`. TTL SHOULD be ≤ 24 hours.
+Responses **MUST** supply `Content-Type: application/imt-rmt+json`, `ETag`, and `Cache-Control`. TTL SHOULD be ≤ 24 hours. Registry error responses **MUST** use `application/problem+json` (RFC 9457) with stable `type` identifiers.
 
 RTGF-REQ-012: Clients **MUST** revalidate cached tokens before expiry and **MUST** fail closed if a fresh token cannot be obtained.
 
@@ -118,6 +123,8 @@ RTGF-REQ-020: Verifiers (routers, PDPs, PEPs, SDKs) **MUST**:
 6. Apply `controls`, `prohibitions`, and `duties` to the planned operation.
 7. Deny execution (`imt_verification_failed`) on any failure.
 
+RTGF-REQ-021: Verifiers **MUST** maintain a bounded cache of observed `jti` values per issuer for at least the greater of `ttl_sec` or 24 hours to prevent replay of revoked or expired tokens.
+
 ## 6. Revocation and Transparency
 RTGF-REQ-030: Registries **MUST** provide signed revocation lists mapping `jti` to status values; lists MAY be compressed bitsets.
 
@@ -127,16 +134,64 @@ RTGF-REQ-031: Transparency logs **MUST** record every issuance and revocation wi
 - Issuer keys SHOULD reside in HSM/KMS with dual control. Rotations MUST overlap and be published via JWKS.
 - Multi-signature endorsements mitigate single-authority compromise.
 - Short TTLs and mandatory revocation checks limit stale-token replay.
-- PQ roadmap: deployments SHOULD plan for hybrid Ed25519 + PQ signatures (e.g., ML-DSA) once standardised.
+- Algorithm agility: Ed25519 signatures are mandatory-to-implement. Deployments **SHOULD** plan for hybrid Ed25519 + PQ signatures (e.g., ML-DSA) once standardised by the IETF or CFRG, and issuers **MUST** announce algorithm changes via transparency events.
 - Transport security follows TLS 1.3 with ALPN `aarp/1` and mutual authentication.
 
 ## 8. Privacy Considerations
 RTGF artefacts contain regulatory metadata only; personal data MUST NOT appear. Sanction lists SHOULD use pseudonymous identifiers with regulated lookup procedures. Transparency artefacts MUST avoid exposing sensitive operational details beyond token metadata.
 
 ## 9. IANA Considerations
-- Register media type `application/imt-rmt+json` (see `draft-lane2-imt-rmt-00`).
-- Register `/.well-known/rtgf` URI suffix.
-- Create registries for jurisdiction codes (authority DID mapping), corridor identifiers, and domain codes (Standards Action/Expert Review as appropriate).
+This section follows the policies defined in RFC 8126.
+
+### 9.1 Media Type Registration
+- Type name: application
+- Subtype name: imt-rmt+json
+- Required parameters: `charset` (default UTF-8)
+- Optional parameters: none
+- Encoding considerations: 8bit (UTF-8 JSON text)
+- Security considerations: Tokens are detached JWS-protected JSON-LD envelopes; see Sections 3, 5, and 7 of this document.
+- Interoperability considerations: none
+- Published specification: this document and `draft-lane2-imt-rmt-00`
+- Applications that use this media type: RTGF registries, compilers, verifiers within aARP deployments
+- Additional information: file extensions: none; fragment identifier considerations: N/A
+- Person & email address for further information: Lane2 Architecture (draft authors)
+- Intended usage: COMMON
+- Restrictions on usage: none
+- Author: Lane2 Architecture
+- Change controller: IETF
+
+### 9.2 Well-Known URI Registration
+- URI suffix: `rtgf`
+- Change controller: IETF
+- Specification document(s): this document (Section 4)
+
+### 9.3 RMT Jurisdiction Registry
+Create a registry mapping jurisdiction codes to issuing authority metadata.
+
+Registration policy: Expert Review. Designated experts **MUST** confirm that the submitter represents a recognised regulatory authority, that a DID/JWKS is published over HTTPS, that the jurisdiction code is ISO 3166-1 alpha-2 or recognised regional code, and that transparency endpoints are reachable.
+
+Registry fields: `jurisdiction_code`, `authority_name`, `authority_did`, `jwks`, `transparency_log_endpoint`, `status`, `updated_at`.
+
+### 9.4 IMT Corridor Registry
+Create a registry mapping corridor identifiers to metadata.
+
+ABNF:
+```
+corridor = jur "-" jur
+jur      = 2ALPHA / "EU" / "UK" / "EA"
+```
+
+Registration policy: Expert Review with the same criteria as Section 9.3 plus verification that the proposed corridor identifier is unique. Registry fields: `corridor_id`, `source_jurisdiction`, `destination_jurisdiction`, `domain_set`, `issuing_authority`, `jwks`, `status`, `updated_at`.
+
+### 9.5 Domain Code Registry
+Create a registry for domain identifiers used in tokens and policy snapshots.
+
+Syntax: `domain = 1*( ALPHA / DIGIT / "-" / "_" )`
+
+Registration policy: Expert Review ensuring descriptive, versioned identifiers accompanied by normative references.
+
+### 9.6 IMT/RMT Error Code Registry
+Create a registry for canonical error codes surfaced via `application/problem+json`. Registration policy: Specification Required. Initial values include `imt_verification_failed` (HTTP 403) and `snapshot_signature_invalid` (HTTP 400).
 
 ## 10. Normative References
 - RFC 2119 — Key words for use in RFCs to Indicate Requirement Levels
@@ -145,6 +200,7 @@ RTGF artefacts contain regulatory metadata only; personal data MUST NOT appear. 
 - RFC 7515 — JSON Web Signature (JWS)
 - RFC 7517 — JSON Web Key (JWK)
 - RFC 8446 — The Transport Layer Security (TLS) Protocol Version 1.3
+- RFC 9325 — Recommendations for Secure Use of Transport Layer Security (TLS) and Datagram Transport Layer Security (DTLS)
 - RFC 8615 — Well-Known Uniform Resource Identifiers (URIs)
 - RFC 8785 — JSON Canonicalization Scheme (JCS)
 - RFC 9110 — HTTP Semantics
@@ -159,8 +215,10 @@ RTGF artefacts contain regulatory metadata only; personal data MUST NOT appear. 
 - Project Mandala Technical Report (BIS, 2024)
 
 ## 12. Change Control
-Future revisions will refine compiler profiles, multi-signature governance, and PQ migration guidance. Changes will remain aligned with updates to `draft-aarp-00` and `draft-lane2-imt-rmt-00`.
+Future revisions will refine compiler profiles, multi-signature governance, and PQ migration guidance. Changes will remain aligned with updates to `draft-aarp-00` and `draft-lane2-imt-rmt-00`. All contributions fall under the IETF Note Well, and the Lane² reference implementation is released under the Apache License 2.0.
 
 ## 13. Revision History
 - v0.1 (2025-10-13): Initial draft defining RTGF pipeline, distribution, verification, and governance requirements.
 
+## 14. Acknowledgements
+The authors thank early reviewers and contributors to the Lane² programme for comments on determinism, transparency, and multi-jurisdiction token governance. A permissive reference implementation is maintained at https://github.com/lane2-rtgf under the Apache License 2.0; Lane² Architecture asserts no patent rights over the RTGF specification to encourage adoption as public regulatory infrastructure.
