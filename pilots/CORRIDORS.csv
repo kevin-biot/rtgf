@@ -1,0 +1,5 @@
+corridor_id,source_jurisdiction,dest_jurisdiction,domain,status,notes
+SG-MY,SG,MY,payments_aml,planning,"Mandala use-case reference: cross-border lending"
+KR-AU,KR,AU,payments_aml,planning,"Mandala use-case reference: cross-border financing"
+EU-SG,EU,SG,ai,planning,"AI governance + cross-border transfer"
+EU-US,EU,US,gdpr,planning,"Transfers: SCC/DPF; sanctions dataset alignment"
