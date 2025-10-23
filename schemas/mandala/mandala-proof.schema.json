@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.lane2.ai/mandala/mandala-proof.schema.json",
+  "title": "Mandala Compliance Proof Reference",
+  "description": "Metadata wrapper linking BIS Project Mandala proof receipts to Lane² evidence bundles.",
+  "type": "object",
+  "required": ["proof_type", "provider", "ccid", "proof_hash", "version", "verified"],
+  "properties": {
+    "proof_type": {
+      "type": "string",
+      "description": "zkp_sanctions | mpc_threshold | aml_attestation etc."
+    },
+    "provider": {
+      "type": "string",
+      "format": "uri",
+      "description": "Mandala node or regulator endpoint"
+    },
+    "ccid": {
+      "type": "string",
+      "description": "Mandala Compliance Check Identifier"
+    },
+    "proof_hash": {
+      "type": "string",
+      "description": "SHA-256 hash of proof bundle"
+    },
+    "version": {
+      "type": "string"
+    },
+    "verified": {
+      "type": "boolean"
+    }
+  }
+}

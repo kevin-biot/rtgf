@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.lane2.ai/imt-rmt/imt.schema.json",
+  "title": "International Mandate Token",
+  "type": "object",
+  "required": [
+    "imt_id",
+    "corridor",
+    "domain",
+    "effective_date",
+    "expires_at",
+    "policy_snapshot_hash"
+  ],
+  "properties": {
+    "imt_id": {
+      "type": "string"
+    },
+    "corridor": {
+      "type": "string"
+    },
+    "domain": {
+      "type": "string"
+    },
+    "effective_date": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "policy_snapshot_hash": {
+      "type": "string"
+    },
+    "controls": {
+      "type": "object"
+    },
+    "prohibitions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "duties": {
+      "type": "object"
+    },
+    "assurance_level": {
+      "type": "string"
+    },
+    "mandala_proofs": {
+      "type": "array",
+      "items": {
+        "$ref": "https://schemas.lane2.ai/mandala/mandala-proof.schema.json"
+      }
+    },
+    "evidence_requirements": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

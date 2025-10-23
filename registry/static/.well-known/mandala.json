@@ -1,0 +1,6 @@
+{
+  "mandala_alignment": true,
+  "mandala_endpoint": "https://mandala.bis.org/evidence/v1",
+  "supported_proof_types": ["zkp_sanctions", "mpc_threshold_check", "aml_attestation"],
+  "notes": "Lane² RTGF registries recognise BIS Project Mandala proofs as valid evidence artefacts satisfying evidence_requirements in IMT/RMT tokens."
+}

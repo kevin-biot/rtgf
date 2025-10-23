@@ -1,0 +1,23 @@
+[
+  {
+    "proof_type": "zkp_sanctions",
+    "description": "Zero-knowledge proof that sanctions screening passed without disclosing lists or counterparties.",
+    "provider": "https://mandala.bis.org/evidence/v1",
+    "evidence_schema": "https://schemas.lane2.ai/mandala/mandala-proof.schema.json",
+    "status": "active"
+  },
+  {
+    "proof_type": "mpc_threshold_check",
+    "description": "Multi-party computation ensuring transaction amount thresholds respected under AML rules.",
+    "provider": "https://mandala.bis.org/evidence/v1",
+    "evidence_schema": "https://schemas.lane2.ai/mandala/mandala-proof.schema.json",
+    "status": "active"
+  },
+  {
+    "proof_type": "aml_attestation",
+    "description": "Attestation from Mandala node proving AML and KYC controls satisfied.",
+    "provider": "https://mandala.bis.org/evidence/v1",
+    "evidence_schema": "https://schemas.lane2.ai/mandala/mandala-proof.schema.json",
+    "status": "active"
+  }
+]
