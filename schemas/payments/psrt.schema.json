@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lane2.ai/schemas/psrt.schema.json",
+  "title": "Payment Settlement Rule Token",
+  "type": "object",
+  "required": ["type", "acquirer", "scheme", "capture"],
+  "properties": {
+    "type": {"const": "PSRT"},
+    "acquirer": {"type": "string"},
+    "scheme": {"type": "string"},
+    "capture": {
+      "type": "object",
+      "required": ["mode"],
+      "properties": {
+        "mode": {"type": "string", "enum": ["auto", "manual"]},
+        "window_sec": {"type": "integer", "minimum": 0}
+      }
+    },
+    "dispute": {
+      "type": "object",
+      "properties": {
+        "reserve_pct": {"type": "number"},
+        "callback_url": {"type": "string", "format": "uri"}
+      }
+    },
+    "kyb": {
+      "type": "object",
+      "properties": {
+        "attestation_hash": {"type": "string"}
+      }
+    }
+  }
+}

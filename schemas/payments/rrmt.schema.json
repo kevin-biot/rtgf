@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lane2.ai/schemas/rrmt.schema.json",
+  "title": "Revenue Rule Matrix Token",
+  "type": "object",
+  "required": ["type", "domain", "jurisdiction", "currency", "pricing"],
+  "properties": {
+    "type": {"const": "RRMT"},
+    "domain": {"type": "string"},
+    "jurisdiction": {
+      "type": "array",
+      "items": {"type": "string"},
+      "minItems": 1
+    },
+    "currency": {"type": "string"},
+    "pricing": {
+      "type": "object",
+      "required": ["mode"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["tiered", "per_call", "per_byte", "per_txn"]
+        },
+        "tiers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["min", "max", "fee_pct"],
+            "properties": {
+              "min": {"type": "number"},
+              "max": {"type": "number"},
+              "fee_pct": {"type": "number"},
+              "min_fee": {"type": "number"}
+            }
+          }
+        },
+        "surcharges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["code", "pct"],
+            "properties": {
+              "code": {"type": "string"},
+              "pct": {"type": "number"}
+            }
+          }
+        }
+      }
+    },
+    "tax": {
+      "type": "object",
+      "properties": {
+        "vat_pct": {"type": "number"}
+      }
+    }
+  }
+}

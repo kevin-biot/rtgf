@@ -1,0 +1,16 @@
+{
+  "type": "IMT",
+  "version": "2025.10",
+  "issued_at": "2025-10-01T00:00:00Z",
+  "nbf": "2025-10-01T00:00:00Z",
+  "exp": "2026-10-01T00:00:00Z",
+  "revoked": false,
+  "corridor": "EU->SG",
+  "domains": ["payments_psd3"],
+  "hash": "sha256:86273b5161f566be632b7cf629f8c37c46a125fddfe8c2ad0ca8f583182d5fa1",
+  "summary": "Intersection of PSD3 corridor obligations between EU and Singapore",
+  "references": {
+    "rmt_a": "urn:lane2:token:RMT:EU:PSD3:3.2",
+    "rmt_b": "urn:lane2:token:RMT:SG:PSD3:3.2"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "type": "PSRT",
+  "version": "2025-01",
+  "issued_at": "2025-10-01T00:00:00Z",
+  "nbf": "2025-10-01T00:00:00Z",
+  "exp": "2026-01-01T00:00:00Z",
+  "revoked": false,
+  "acquirer": "did:org:visa",
+  "scheme": "VISA",
+  "capture": {
+    "mode": "auto",
+    "window_sec": 86400
+  },
+  "dispute": {
+    "reserve_pct": 0.05,
+    "callback_url": "https://mock.dop.lane2.ai/disputes"
+  },
+  "kyb": {
+    "attestation_hash": "sha256:mock-attestation"
+  }
+}

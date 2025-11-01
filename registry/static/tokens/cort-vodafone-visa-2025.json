@@ -1,0 +1,29 @@
+{
+  "type": "CORT",
+  "version": "2025-Q4",
+  "issued_at": "2025-10-01T00:00:00Z",
+  "nbf": "2025-10-01T00:00:00Z",
+  "exp": "2026-04-01T00:00:00Z",
+  "revoked": false,
+  "parties": [
+    {"id": "did:org:vodafone", "role": "merchant_of_record"},
+    {"id": "did:org:visa", "role": "scheme"},
+    {"id": "did:org:brokerXYZ", "role": "allocation_agent"}
+  ],
+  "references": {
+    "rrmt": "urn:lane2:token:RRMT:EU:PSD3:3.2",
+    "rmt": "urn:lane2:token:RMT:EU:PSD3:3.2"
+  },
+  "splits": [
+    {"party": "did:org:vodafone", "pct": 0.8},
+    {"party": "did:org:brokerXYZ", "pct": 0.15},
+    {"party": "did:org:visa", "pct": 0.05}
+  ],
+  "fx": {
+    "enabled": false
+  },
+  "payout": {
+    "mode": "t+1",
+    "scheme": "SEPA_INSTANT"
+  }
+}

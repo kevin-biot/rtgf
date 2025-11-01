@@ -1,0 +1,26 @@
+{
+  "type": "RRMT",
+  "version": "2025.10",
+  "issued_at": "2025-10-01T00:00:00Z",
+  "nbf": "2025-10-01T00:00:00Z",
+  "exp": "2026-10-01T00:00:00Z",
+  "revoked": false,
+  "domain": "payments_psd3",
+  "jurisdiction": ["EU"],
+  "currency": "EUR",
+  "pricing": {
+    "mode": "tiered",
+    "tiers": [
+      {"min": 0, "max": 10000, "fee_pct": 0.45, "min_fee": 0.1},
+      {"min": 10000, "max": 50000, "fee_pct": 0.35},
+      {"min": 50000, "max": 1000000, "fee_pct": 0.25}
+    ],
+    "surcharges": [
+      {"code": "cross_border", "pct": 0.1},
+      {"code": "high_risk_mcc", "pct": 0.2}
+    ]
+  },
+  "tax": {
+    "vat_pct": 0
+  }
+}
