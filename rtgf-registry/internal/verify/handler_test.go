@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 type stubVerifier struct {
@@ -97,6 +98,15 @@ func TestVerifyExpiredToken(t *testing.T) {
 	}
 }
 
+func TestVerifyMethodNotAllowed(t *testing.T) {
+	svc := NewService(1, &stubVerifier{})
+	rec := httptest.NewRecorder()
+	svc.HandleVerify(rec, httptest.NewRequest(http.MethodGet, "/verify", nil))
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405 got %d", rec.Code)
+	}
+}
+
 func TestRevocationBump(t *testing.T) {
 	svc := NewService(1, &stubVerifier{})
 	rec := httptest.NewRecorder()
@@ -106,5 +116,79 @@ func TestRevocationBump(t *testing.T) {
 	_ = json.Unmarshal(rec.Body.Bytes(), &out)
 	if out.RevEpoch != 2 {
 		t.Fatalf("expected revEpoch 2 got %d", out.RevEpoch)
+	}
+}
+
+func TestRevocationBumpMethodNotAllowed(t *testing.T) {
+	svc := NewService(1, &stubVerifier{})
+	rec := httptest.NewRecorder()
+	svc.HandleRevocationsBump(rec, httptest.NewRequest(http.MethodGet, "/revocations/bump", nil))
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405 got %d", rec.Code)
+	}
+}
+
+func TestRevocationsGet(t *testing.T) {
+	svc := NewService(9, &stubVerifier{})
+	rec := httptest.NewRecorder()
+	svc.HandleRevocationsGet(rec, httptest.NewRequest(http.MethodGet, "/revocations", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d", rec.Code)
+	}
+	var out RevocationResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("unmarshal resp: %v", err)
+	}
+	if out.RevEpoch != 9 {
+		t.Fatalf("expected revEpoch 9 got %d", out.RevEpoch)
+	}
+}
+
+func TestRevocationsGetMethodNotAllowed(t *testing.T) {
+	svc := NewService(1, &stubVerifier{})
+	rec := httptest.NewRecorder()
+	svc.HandleRevocationsGet(rec, httptest.NewRequest(http.MethodPost, "/revocations", nil))
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405 got %d", rec.Code)
+	}
+}
+
+func TestValidateWindowsErrors(t *testing.T) {
+	now := time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name     string
+		payload  string
+		expected string
+	}{
+		{"metadataMissing", "", "metadata_missing"},
+		{"invalidJSON", `{`, "metadata_invalid"},
+		{"revoked", `{"revoked":true}`, "token_revoked"},
+		{"invalidNbf", `{"nbf":"bad","exp":"2100-01-01T00:00:00Z"}`, "invalid_nbf"},
+		{"notYetValid", `{"nbf":"2026-01-01T00:00:00Z","exp":"2100-01-01T00:00:00Z","revoked":false}`, "token_not_yet_valid"},
+		{"invalidExp", `{"nbf":"2000-01-01T00:00:00Z","exp":"soon"}`, "invalid_exp"},
+		{"expired", `{"nbf":"2000-01-01T00:00:00Z","exp":"2024-01-01T00:00:00Z","revoked":false}`, "token_expired"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var tokens map[string]string
+			if tc.payload != "" {
+				tokens = map[string]string{"urn:test": tc.payload}
+			}
+			err := validateWindows(now, &stubVerifier{tokens: tokens}, VerifyRequest{
+				Tokens: struct {
+					RMT  string `json:"rmt"`
+					IMT  string `json:"imt"`
+					CORT string `json:"cort"`
+					PSRT string `json:"psrt"`
+					AMLS string `json:"amls,omitempty"`
+					AMLV string `json:"amlv,omitempty"`
+				}{
+					RMT: "urn:test",
+				},
+			})
+			if err == nil || !strings.Contains(err.Error(), tc.expected) {
+				t.Fatalf("expected error containing %q, got %v", tc.expected, err)
+			}
+		})
 	}
 }

@@ -79,3 +79,69 @@ func expectedType(uri string) string {
 		return ""
 	}
 }
+
+func TestNewStaticVerifierInvalidJSON(t *testing.T) {
+	fsys := fstest.MapFS{
+		"broken.json": {Data: []byte(`{"type":`)},
+	}
+	fileMap := FileMap{
+		"urn:lane2:token:RMT:BROKEN": "broken.json",
+	}
+	_, err := NewStaticVerifier(fsys, ".", fileMap)
+	if err == nil || !strings.Contains(err.Error(), "not valid JSON") {
+		t.Fatalf("expected invalid JSON error, got %v", err)
+	}
+}
+
+func TestNewStaticVerifierTypeFallback(t *testing.T) {
+	fsys := fstest.MapFS{
+		"imt.json": {Data: []byte(`{"nbf":"2000-01-01T00:00:00Z","exp":"2100-01-01T00:00:00Z"}`)},
+	}
+	fileMap := FileMap{
+		"urn:lane2:token:IMT:EU:SG:2025": "imt.json",
+	}
+	verifier, err := NewStaticVerifier(fsys, ".", fileMap)
+	if err != nil {
+		t.Fatalf("NewStaticVerifier: %v", err)
+	}
+	info, ok := verifier.Metadata("urn:lane2:token:IMT:EU:SG:2025")
+	if !ok {
+		t.Fatalf("expected metadata for IMT")
+	}
+	if info.Type != "IMT" {
+		t.Fatalf("expected fallback type IMT, got %s", info.Type)
+	}
+}
+
+func TestVerifyRRMTTypeMismatch(t *testing.T) {
+	fsys := fstest.MapFS{
+		"rrmt.json": {Data: []byte(`{"type":"CORT"}`)},
+	}
+	fileMap := FileMap{
+		"urn:lane2:token:RMT:EU:PSD3:3.2": "rrmt.json",
+	}
+	verifier, err := NewStaticVerifier(fsys, ".", fileMap)
+	if err != nil {
+		t.Fatalf("NewStaticVerifier: %v", err)
+	}
+	err = verifier.VerifyRRMT(context.Background(), "urn:lane2:token:RMT:EU:PSD3:3.2")
+	if err == nil || !strings.Contains(err.Error(), "unexpected type") {
+		t.Fatalf("expected unexpected type error, got %v", err)
+	}
+}
+
+func TestDetectTypeTable(t *testing.T) {
+	cases := map[string]string{
+		"urn:lane2:token:RRMT:EU:PSD3:3.2": "RRMT",
+		"urn:lane2:token:CORT:FOO":         "CORT",
+		"urn:lane2:token:PSRT:BAR":         "PSRT",
+		"urn:lane2:token:IMT:EU:SG:2025":   "IMT",
+		"urn:lane2:token:RMT:EU:PSD3:3.2":  "RMT",
+		"urn:lane2:token:UNKNOWN":          "",
+	}
+	for uri, want := range cases {
+		if got := detectType(uri); got != want {
+			t.Fatalf("detectType(%s) = %q, want %q", uri, got, want)
+		}
+	}
+}

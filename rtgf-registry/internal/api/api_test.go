@@ -66,6 +66,30 @@ func TestTokenLookupNotFound(t *testing.T) {
 	}
 }
 
+func TestTokenLookupMethodNotAllowed(t *testing.T) {
+	s := newTestServer(t)
+	req := httptest.NewRequest(http.MethodPost, "/tokens", nil)
+	rec := httptest.NewRecorder()
+
+	s.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405, got %d", rec.Code)
+	}
+}
+
+func TestTokenLookupInvalidSlug(t *testing.T) {
+	s := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/tokens/cort/bad..slug", nil)
+	rec := httptest.NewRecorder()
+
+	s.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+}
+
 func TestCatalogEndpoint(t *testing.T) {
 	s := newTestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/catalog", nil)
@@ -98,6 +122,78 @@ func TestCatalogEndpoint(t *testing.T) {
 	}
 	if len(payload.Corridors) == 0 || payload.Corridors[0].ID != "EU:THA:CRAFT-01" {
 		t.Fatalf("unexpected corridors: %+v", payload.Corridors)
+	}
+}
+
+func TestCatalogEndpointRespectsBaseURL(t *testing.T) {
+	t.Setenv("RTGF_URL", "https://registry.example.com")
+	fsys := fstest.MapFS{
+		"jwks.json":  {Data: []byte(`{"keys":[]}`)},
+		"token.json": {Data: []byte(`{"type":"RRMT"}`)},
+	}
+	entries := map[string]TokenEntry{
+		"urn:test:token": {
+			URI:       "urn:test:token",
+			Type:      "RRMT",
+			Slug:      "token",
+			Filename:  "token.json",
+			Hash:      "sha256:test",
+			Version:   "v1",
+			IssuedAt:  "2025-01-01T00:00:00Z",
+			NotBefore: "2025-01-01T00:00:00Z",
+			ExpiresAt: "2026-01-01T00:00:00Z",
+			Revoked:   false,
+		},
+	}
+	server, err := NewServer(Config{
+		StaticFS: fsys,
+		Tokens:   entries,
+	})
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/catalog", nil)
+	rec := httptest.NewRecorder()
+	server.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d", rec.Code)
+	}
+	var payload struct {
+		Issuers []struct {
+			JWKS string `json:"jwks"`
+		} `json:"issuers"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal catalog: %v", err)
+	}
+	if len(payload.Issuers) == 0 || payload.Issuers[0].JWKS != "https://registry.example.com/jwks.json" {
+		t.Fatalf("expected JWKS URL with base, got %+v", payload.Issuers)
+	}
+}
+
+func TestJWKSHandler(t *testing.T) {
+	s := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/jwks.json", nil)
+	rec := httptest.NewRecorder()
+	s.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("unexpected content type %s", ct)
+	}
+	if !strings.Contains(rec.Body.String(), `"keys"`) {
+		t.Fatalf("expected keys in JWKS response: %s", rec.Body.String())
+	}
+}
+
+func TestJWKSMethodNotAllowed(t *testing.T) {
+	s := newTestServer(t)
+	req := httptest.NewRequest(http.MethodPost, "/jwks.json", nil)
+	rec := httptest.NewRecorder()
+	s.ServeHTTP(rec, req)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405, got %d", rec.Code)
 	}
 }
 

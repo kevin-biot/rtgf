@@ -1,21 +1,16 @@
 #!/usr/bin/env node
 // Minimal CLI skeleton. TODO: implement deterministic snapshot → predicate compilation.
 import { readFileSync, writeFileSync } from "fs";
+import { pathToFileURL } from "url";
 
-function main() {
-  const args = process.argv.slice(2);
-  const get = (flag: string) => {
-    const idx = args.indexOf(flag);
-    return idx >= 0 ? args[idx + 1] : "";
-  };
-  const snapshotPath = get("--snapshot");
-  const outPred = get("--out");
-  const outPlan = get("--plan-out");
-  if (!snapshotPath || !outPred || !outPlan) {
-    console.error("Usage: rtgf-ppe compile --snapshot policy.jsonld --out predicate_set.json --plan-out eval_plan.json");
-    process.exit(2);
-  }
-  const policy = JSON.parse(readFileSync(snapshotPath, "utf-8"));
+export interface CompileOptions {
+  snapshotPath: string;
+  outPred: string;
+  outPlan: string;
+}
+
+export function compile(options: CompileOptions) {
+  const policy = JSON.parse(readFileSync(options.snapshotPath, "utf-8"));
   const predicateSet = {
     predicate_set_id: `ps.${policy.jurisdiction}.${policy.domain}.v1`,
     version: "1.0.0",
@@ -31,9 +26,39 @@ function main() {
     sequence,
     hash: "sha256:TODO-plan-hash"
   };
-  writeFileSync(outPred, JSON.stringify(predicateSet, null, 2));
-  writeFileSync(outPlan, JSON.stringify(plan, null, 2));
+  writeFileSync(options.outPred, JSON.stringify(predicateSet, null, 2));
+  writeFileSync(options.outPlan, JSON.stringify(plan, null, 2));
+  return { predicateSet, plan };
+}
+
+function parseArgs(argv: string[]) {
+  const get = (flag: string) => {
+    const idx = argv.indexOf(flag);
+    return idx >= 0 ? argv[idx + 1] : "";
+  };
+  const snapshotPath = get("--snapshot");
+  const outPred = get("--out");
+  const outPlan = get("--plan-out");
+  if (!snapshotPath || !outPred || !outPlan) {
+    throw new Error("Usage: rtgf-ppe compile --snapshot policy.jsonld --out predicate_set.json --plan-out eval_plan.json");
+  }
+  return { snapshotPath, outPred, outPlan };
+}
+
+export function run(argv = process.argv.slice(2)) {
+  const opts = parseArgs(argv);
+  const { outPred, outPlan } = opts;
+  compile(opts);
   console.log("PPE-Compiler outputs written:", outPred, outPlan);
 }
 
-main();
+const invokedPath = process.argv[1] ? pathToFileURL(process.argv[1]).href : "";
+if (import.meta.url === invokedPath) {
+  try {
+    run();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(message);
+    process.exit(2);
+  }
+}

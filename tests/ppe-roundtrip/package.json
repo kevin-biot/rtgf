@@ -1,0 +1,16 @@
+{
+  "name": "@rtgf/ppe-roundtrip",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "run": "node --loader ts-node/esm harness.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "ajv": "^8.12.0",
+    "ajv-formats": "^2.1.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.0"
+  }
+}
