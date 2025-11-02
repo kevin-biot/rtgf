@@ -6,39 +6,66 @@ This document describes the infrastructure-level architecture for the Reference 
 
 ## 1. High-Level Topology
 
-```
-                   ┌─────────────────────────────┐
-                   │  Regulator / Policy Sources │
-                   │  (Signed Snapshots, Datasets)│
-                   └──────────────┬──────────────┘
-                                  │ mTLS + JWS
-                      ┌───────────▼───────────┐
-                      │ Snapshot Ingestion    │
-                      │ (Verifier + Watcher)  │
-                      └───────────┬───────────┘
-                                  │
-                 ┌────────────────▼────────────────┐
-                 │  Deterministic Build Cluster    │
-                 │  (Compiler, Policy Mapper, QA)  │
-                 └──────┬──────────────▲──────────┘
-                        │              │
-           Transparency │              │ Artefacts (RMT/IMT/CORT/PSRT)
-             Logging    │              │
-                 ┌──────▼──────────────┴──────────┐
-                 │  RTGF Registry (HA, Geo)       │
-                 │  /.well-known, Tokens, JWKS    │
-                 └──────┬───────┬────────┬────────┘
-                        │       │        │
-         ┌──────────────▼┐ ┌────▼────┐ ┌─▼──────────┐
-         │ RTGF Verifier │ │ Revoca- │ │ Transparency│
-         │  API (HA)     │ │ tion Svc│ │  API        │
-         └──────┬────────┘ └─────────┘ └────────────┘
-                │   JSON, mTLS, Problem Details
-                │
-       ┌────────▼────────┐
-       │ Downstream PDPs │
-       │ & Corridor Ops  │
-       └─────────────────┘
+```mermaid
+%% Source: docs/architecture/diagrams/systems-architecture.mmd
+flowchart LR
+    subgraph Regulators["Regulator / Policy Sources"]
+        R1["Signed Policy Snapshots"]
+        R2["Sanctions / AML Datasets"]
+    end
+
+    subgraph BuildPlane["Build Plane (Restricted)"]
+        SI["Snapshot Ingestion"]
+        Compiler["Deterministic Compiler\n(rtgf-compiler)"]
+        QA["Determinism Harness & QA"]
+    end
+
+    subgraph Transparency["Transparency Service"]
+        TL["Merkle Log & Proofs"]
+    end
+
+    subgraph ControlPlane["Control Plane (HA)"]
+        Registry["RTGF Registry\n/.well-known, Tokens, JWKS"]
+        Verifier["Verification API"]
+        Revocation["Revocation Service"]
+    end
+
+    subgraph Observability["Observation Plane"]
+        Metrics["Prometheus/Grafana"]
+        Logs["Structured Logs / SIEM"]
+        Tracing["OpenTelemetry Collector"]
+    end
+
+    subgraph Partners["Corridor Partners / PDPs"]
+        Consumers["Routers, PDPs, Auditors"]
+    end
+
+    R1 -->|mTLS + JWS| SI
+    R2 -->|HTTPS| SI
+    SI --> Compiler
+    Compiler --> QA
+    QA -->|Artefacts + Manifests| Registry
+    QA --> TL
+    TL --> Registry
+
+    Registry --> Verifier
+    Registry --> Revocation
+    Verifier --> TL
+    Revocation --> TL
+
+    Registry -->|Tokens, JWKS| Consumers
+    Verifier -->|/verify| Consumers
+    Revocation -->|revEpoch| Consumers
+
+    Registry --> Metrics
+    Verifier --> Metrics
+    Revocation --> Metrics
+    Compiler --> Logs
+    TL --> Logs
+    Registry --> Logs
+    Verifier --> Tracing
+    Registry --> Tracing
+    Compiler --> Tracing
 ```
 
 ### 1.1 Deployment Contexts

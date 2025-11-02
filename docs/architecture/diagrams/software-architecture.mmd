@@ -1,0 +1,42 @@
+```mermaid
+flowchart TD
+    subgraph Shared
+        Schemas["shared/ppe-schemas"]
+        ADRs["docs/architecture/rtgf/adr"]
+    end
+
+    Snapshots["Policy Snapshots\n(JSON-LD)"]
+    Compiler["rtgf-compiler\n(cmd/rtgf-ppe.ts)"]
+    PredicateSet["predicate_set.json"]
+    EvalPlan["eval_plan.json"]
+    Tokens["RMT/IMT/CORT\nCanonical JSON"]
+    Harness["tests/ppe-roundtrip\nDeterminism Harness"]
+
+    Registry["rtgf-registry\ninternal/api"]
+    VerifySvc["rtgf-registry\ninternal/verify"]
+    VerifyLib["rtgf-verify-lib"]
+    PPEEval["aarp-core/ppe-evaluator"]
+    Downstream["Corridor Services / PDP"]
+
+    Snapshots --> Compiler
+    Schemas --> Compiler
+    Compiler --> PredicateSet
+    Compiler --> EvalPlan
+    Compiler --> Tokens
+
+    PredicateSet --> Harness
+    EvalPlan --> Harness
+    Tokens --> Harness
+
+    Tokens --> Registry
+    Registry --> VerifySvc
+    VerifySvc --> VerifyLib
+    VerifySvc --> PPEEval
+    VerifySvc --> Downstream
+
+    ADRs --> Compiler
+    ADRs --> Registry
+    ADRs --> VerifySvc
+    ADRs --> VerifyLib
+    ADRs --> PPEEval
+```

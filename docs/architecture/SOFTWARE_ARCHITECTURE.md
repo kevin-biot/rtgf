@@ -23,28 +23,31 @@ Supporting assets: `examples/`, `schemas/`, `docs/openapi/registry-openapi.yaml`
 ## 2. Core Workflows
 
 ### 2.1 Build-Time Flow
-```
-policy snapshot → ppe-compiler (ts) → predicate_set.json
-                              ↓
-                       eval_plan.json
-                              ↓
-                    token assembler (ts) → RMT/IMT/CORT JSON (canonical)
-                              ↓
-                   determinism harness (ts) → digests + manifest
+```mermaid
+%% Source: docs/architecture/diagrams/software-architecture.mmd (build-time segment)
+flowchart TD
+    Snapshots["Policy Snapshots\n(JSON-LD)"] --> Compiler["rtgf-compiler\n(cmd/rtgf-ppe.ts)"]
+    Schemas["shared/ppe-schemas"] --> Compiler
+    Compiler --> PredicateSet["predicate_set.json"]
+    Compiler --> EvalPlan["eval_plan.json"]
+    Compiler --> Tokens["RMT/IMT/CORT\nCanonical JSON"]
+    PredicateSet --> Harness["tests/ppe-roundtrip\nDeterminism Harness"]
+    EvalPlan --> Harness
+    Tokens --> Harness
 ```
 - `cmd/rtgf-ppe.ts` exposes CLI (`compile --snapshot --out --plan-out`).  
 - `roundtrip.test.ts` ensures byte-identical output; AJV validation against schemas.  
 - Build manifest includes evidence hashes, predicate IDs, evaluation sequence.
 
 ### 2.2 Run-Time Flow
-```
-Client token request → rtgf-registry (Go)
-                   ↓
-        Fetch token JSON / JWKS / revocations
-                   ↓
-   Downstream services call rtgf-verifier endpoints
-                   ↓
-   Verifier uses rtgf-verify-lib + PPE evaluator to assess decisions
+```mermaid
+%% Source: docs/architecture/diagrams/software-architecture.mmd (runtime segment)
+flowchart TD
+    Tokens["RMT/IMT/CORT\nCanonical JSON"] --> Registry["rtgf-registry\ninternal/api"]
+    Registry --> VerifySvc["rtgf-registry\ninternal/verify"]
+    VerifySvc --> VerifyLib["rtgf-verify-lib"]
+    VerifySvc --> PPEEval["aarp-core/ppe-evaluator"]
+    VerifySvc --> Downstream["Corridor Services / PDP"]
 ```
 - Registry handlers implemented in `internal/api`.  
 - Verification logic in `internal/verify`, leveraging `rtgf-verify-lib` for metadata checks and `ppe-evaluator` for predicate evaluation.  
