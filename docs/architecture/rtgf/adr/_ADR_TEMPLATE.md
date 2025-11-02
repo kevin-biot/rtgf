@@ -9,24 +9,24 @@
 
 ---
 
-## 1) Purpose & Scope
+## 1. Purpose & Scope
 <What problem do we solve, for whom, and why now? Link to Context.>
 
-## 2) Architecture / Data Model
-<Describe the essential architecture, key components, and/or canonical schemas. Diagrams encouraged.>
+## 2. Architecture Overview
+<Describe the essential architecture, key components, and data flow. Include diagrams where useful.>
 
-## 3) Determinism & Provenance
+## 3. Determinism & Provenance
 <How is determinism achieved (JCS canonicalization, fixed seeds, build graph pinning)? What is recorded in revEpoch? How are proofs anchored?>
 
-## 4) Security & Trust
+## 4. Security & Trust
 <mTLS, JWKS, DANE/TLSA, signature scheme, consent/policy gates, fail-closed behaviour.>
 
-## 5) Error Taxonomy
+## 5. Error Taxonomy
 | Code | Condition | Action |
 |------|----------|--------|
 | XYZ_… | … | … |
 
-## 6) Metrics & SLOs
+## 6. Metrics & SLOs
 | Metric | Target | Notes |
 |--------|--------|-------|
 | … | … | … |
@@ -34,17 +34,24 @@
 Prometheus metrics:  
 `component_metric_a`, `component_metric_b`, …
 
-## 7) Test Plan Mapping
+## 7. Interfaces & Integration
+| Dependency | Direction | Purpose |
+|------------|-----------|---------|
+| …          | …         | …       |
+
+## 8. Metrics & Observability
+<Call out key dashboards, tracing, and logging requirements.>
+
+## 9. Acceptance Tests
 | Test ID | Scenario | Expected outcome |
 |---------|----------|------------------|
-| CTX-NN  | …        | …                |
+| RTGF-CT-XX | … | … |
 
-## 8) Acceptance Criteria
+## 10. Acceptance Criteria
 1️⃣ …  
 2️⃣ …  
 3️⃣ …  
 
-## 9) Consequences
+## Consequences
 ✅ … benefits…  
 ⚠️ … trade-offs…
-
