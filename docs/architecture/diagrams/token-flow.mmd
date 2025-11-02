@@ -1,4 +1,3 @@
-```mermaid
 sequenceDiagram
     participant Regulator as Regulator Snapshot Authority
     participant Compiler as RTGF Compiler
@@ -25,5 +24,4 @@ sequenceDiagram
     Auditor->>Registry: Request proof bundles (token issuance)
     Registry-->>Auditor: Return Merkle inclusion proof, revocation status
 
-    note over Compiler,Registry: Token types produced: RMT (jurisdictional), IMT (bilateral), CORT (corridor operations), PSRT (payment service routes).
-```
+    note over Compiler,Registry: Token types produced: RMT (jurisdictional), IMT (bilateral), CORT (corridor operations), PSRT (payment routes).
