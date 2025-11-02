@@ -1,0 +1,29 @@
+```mermaid
+sequenceDiagram
+    participant Regulator as Regulator Snapshot Authority
+    participant Compiler as RTGF Compiler
+    participant Registry as RTGF Registry
+    participant Verifier as Verification API
+    participant PDP as Corridor PDP / Router
+    participant Auditor as External Auditor
+
+    Regulator->>Compiler: Publish signed policy snapshot (RMT/IMT inputs)
+    Compiler->>Compiler: Generate predicate set & eval plan
+    Compiler->>Compiler: Assemble tokens (RMT, IMT, CORT, PSRT)
+    Compiler->>Registry: Push canonical tokens + metadata
+    Compiler->>Registry: Update transparency log & revocation baseline
+
+    Registry-->>Verifier: Expose tokens & JWKS via HTTPS
+    Registry-->>PDP: Serve tokens (pull) for operational cache
+    Registry-->>Auditor: Provide transparency proofs & catalog
+
+    PDP->>Verifier: POST /verify with token URIs
+    Verifier-->>Registry: Fetch token JSON & JWKS (if cache miss)
+    Verifier-->>PDP: Return decision, reasons, revEpoch
+    Verifier-->>Auditor: Optional verification report / evidence bundle
+
+    Auditor->>Registry: Request proof bundles (token issuance)
+    Registry-->>Auditor: Return Merkle inclusion proof, revocation status
+
+    note over Compiler,Registry: Token types produced: RMT (jurisdictional), IMT (bilateral), CORT (corridor operations), PSRT (payment service routes).
+```

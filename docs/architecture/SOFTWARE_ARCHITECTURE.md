@@ -142,7 +142,41 @@ graph LR
 
 ---
 
-## 7. Extension Points & Roadmap
+## 7. Token Consumers & Proof Flows
+```mermaid
+%% Source: docs/architecture/diagrams/token-flow.mmd
+sequenceDiagram
+    participant Regulator as Regulator Snapshot Authority
+    participant Compiler as RTGF Compiler
+    participant Registry as RTGF Registry
+    participant Verifier as Verification API
+    participant PDP as Corridor PDP / Router
+    participant Auditor as External Auditor
+
+    Regulator->>Compiler: Publish signed policy snapshot (RMT/IMT inputs)
+    Compiler->>Compiler: Generate predicate set & eval plan
+    Compiler->>Compiler: Assemble tokens (RMT, IMT, CORT, PSRT)
+    Compiler->>Registry: Push canonical tokens + metadata
+    Compiler->>Registry: Update transparency log & revocation baseline
+
+    Registry-->>Verifier: Expose tokens & JWKS via HTTPS
+    Registry-->>PDP: Serve tokens (pull) for operational cache
+    Registry-->>Auditor: Provide transparency proofs & catalog
+
+    PDP->>Verifier: POST /verify with token URIs
+    Verifier-->>Registry: Fetch token JSON & JWKS (if cache miss)
+    Verifier-->>PDP: Return decision, reasons, revEpoch
+    Verifier-->>Auditor: Optional verification report / evidence bundle
+
+    Auditor->>Registry: Request proof bundles (token issuance)
+    Registry-->>Auditor: Return Merkle inclusion proof, revocation status
+
+    note over Compiler,Registry: Tokens produced: RMT (jurisdictional), IMT (bilateral), CORT (corridor operations), PSRT (payment routes).
+```
+
+---
+
+## 8. Extension Points & Roadmap
 
 | Area | Planned Enhancement |
 |------|---------------------|
@@ -154,7 +188,7 @@ graph LR
 
 ---
 
-## 8. Contribution & Coding Standards
+## 9. Contribution & Coding Standards
 
 - **TypeScript:** Node 18, strict mode, Vitest for testing, code style (ESLint/Prettier planned).  
 - **Go:** Go 1.22+, table-driven tests, enforce gofmt/golangci-lint (to be wired).  
@@ -163,7 +197,7 @@ graph LR
 
 ---
 
-## 9. References
+## 10. References
 
 - `docs/architecture/SYSTEMS_ARCHITECTURE.md` — infrastructure topology.  
 - ADR-RTGF-001 … 010 — detailed decisions impacting software modules.  
