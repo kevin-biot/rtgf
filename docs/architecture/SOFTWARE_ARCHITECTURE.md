@@ -119,19 +119,25 @@ Canonicalisation uses JSON Canonicalization Scheme (RFC 8785) at build time; ver
 
 ## 6. Dependency Graph
 
-```
-docs/architecture/rtgf/adr -> guides decisions for all modules
-shared/ppe-schemas ─────────┐
-                            ▼
-rtgf-compiler  ────────> predicate_set / eval_plan ───┐
-                                                     ▼
-                                            registry static fixtures / tokens
-                                                     ▼
-rtgf-registry/internal/api ──> serves token JSON
-rtgf-registry/internal/verify ─> uses rtgf-verify-lib, ppe-evaluator
-rtgf-verify-lib ─────────────┘
-aarp-core/ppe-evaluator ─────┘
-tests/ppe-roundtrip ─────────► ensures deterministic compile+evaluate chain
+```mermaid
+%% Source: docs/architecture/diagrams/software-architecture.mmd (dependencies view)
+graph LR
+    ADRs["ADR Catalog"] --> Compiler
+    ADRs --> RegistryAPI
+    ADRs --> VerifySvc
+    ADRs --> VerifyLibNode
+    ADRs --> Evaluator
+
+    Schemas["shared/ppe-schemas"] --> Compiler
+    Compiler --> PredEvalSet["predicate_set & eval_plan"]
+    Compiler --> TokenFixtures["Token fixtures"]
+
+    PredEvalSet --> Harness["tests/ppe-roundtrip"]
+    TokenFixtures --> RegistryAPI["rtgf-registry/internal/api"]
+    RegistryAPI --> VerifySvc["rtgf-registry/internal/verify"]
+    VerifySvc --> VerifyLibNode["rtgf-verify-lib"]
+    VerifySvc --> Evaluator["aarp-core/ppe-evaluator"]
+    Harness --> VerifySvc
 ```
 
 ---
