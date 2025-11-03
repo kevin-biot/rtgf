@@ -130,6 +130,92 @@ Provide deterministic audit, replay, and cross-system trace governance for all `
 - Integrity report and visualization output (JSON + HTML) demonstrating hash-link verification.  
 - Documentation describing ingestion process, validation rules, and API usage.
 
+### Clarifications: Evidence Schema, Hashing, Keys, and Ingestion Lifecycle
+
+#### Shared Evidence Schema
+All producing components MUST emit artifacts conforming to the versioned schema at `https://ontology.example.com/schema/evidence-bundle.json`:
+
+```json
+{
+  "$id": "https://ontology.example.com/schema/evidence-bundle.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UnifiedEvidenceBundle",
+  "type": "object",
+  "required": ["trace_id", "producer", "artifact_type", "hash", "signature", "schema_version"],
+  "properties": {
+    "trace_id": { "type": "string", "pattern": "^trc-[A-Za-z0-9]{8,}$" },
+    "artifact_type": {
+      "type": "string",
+      "enum": ["context", "normalization", "route", "identity", "evidence"]
+    },
+    "producer": { "type": "string", "enum": ["caas", "dop", "aarp", "sapp", "mini-caas"] },
+    "schema_version": { "type": "string", "example": "v0.1.0" },
+    "payload": { "type": "object" },
+    "hash": {
+      "type": "string",
+      "description": "sha256 over RFC8785 canonical JSON of payload"
+    },
+    "signature": {
+      "type": "object",
+      "required": ["alg", "kid", "value"],
+      "properties": {
+        "alg": { "type": "string", "enum": ["EdDSA"] },
+        "kid": { "type": "string" },
+        "value": { "type": "string", "contentEncoding": "base64" }
+      }
+    }
+  }
+}
+```
+
+#### Canonicalisation & Hashing Rules
+- Hashes use **SHA-256** over **RFC 8785 canonical JSON** of the `payload`. `hash` MUST equal `"sha256:" + hex_digest`.  
+- `trace_id` propagates unchanged across all components.  
+- `normalization.hash` == `route.linked_hash`.  
+- `evidence.merkle_root` includes hashes from normalization + route (verifiable via Merkle proof).  
+- RTGF recomputes these values; mismatches trigger integrity alarms.
+
+#### Signature & Key Distribution
+
+| Component  | JWKS URL                                             | Rotation  | Scope                          |
+|------------|------------------------------------------------------|-----------|--------------------------------|
+| CaaS       | `https://caas.example.com/.well-known/jwks.json`     | 90 days   | Context artifacts              |
+| DOP        | `https://dop.example.com/.well-known/jwks.json`      | 90 days   | Normalization, route, evidence |
+| aARP       | `https://aarp.example.com/.well-known/jwks.json`     | 180 days  | Route admission proofs         |
+| SAPP       | `https://sapp.example.com/.well-known/jwks.json`     | 180 days  | Compliance bundles             |
+| mini-CaaS  | Registered device key (embedded)                     | lifecycle | Local context artifacts        |
+
+RTGF caches JWKS for 24 hours and re-fetches when verification fails.
+
+#### Ingestion Interface & Lifecycle
+
+1. **Webhook (preferred)** – `POST /rtgf/v1/ingest`
+   - Headers: `Authorization: Bearer <token>`, `Content-Type: application/json`.  
+   - Auth: mutual TLS or OAuth2 client credentials.  
+   - Body: one or more `UnifiedEvidenceBundle` objects (≤20 per request).  
+   - Response: `202 Accepted` with per-artifact status.
+
+2. **File Drop / Pull** – Daily JSONL batches at `/exports/YYYY/MM/DD/`, collected hourly by RTGF.
+
+Producers call the webhook immediately after artifact creation (or within 15 minutes if offline). RTGF verifies within 60 seconds of receipt.
+
+#### Error Budgets & Observability
+- RTGF notifies producers via `POST {component}/v1/integrity/failure` containing `{trace_id, artifact_id, reason, detected_at}`.  
+- Metrics: `rtgf_ingest_total{component}`, `rtgf_integrity_failures_total{component,reason}`, `rtgf_verification_latency_seconds`.  
+- SLO: 99% of artifacts verified within 60 s; integrity-check false positives <0.1%.
+
+#### Validation Summary
+
+| Artifact Type | Producer          | Key (kid)   | Hash Field            | RTGF Validation |
+|----------------|-------------------|-------------|-----------------------|-----------------|
+| context        | CaaS / mini-CaaS  | `caas_kid`  | `payload.hash`        | Schema, hash, signature, trace continuity |
+| normalization  | DOP               | `dop_kid`   | `normalization.hash`  | Equals `route.linked_hash` |
+| route          | DOP + aARP        | `dop_kid`, `aarp_kid` | `route.hash` | Token signature & lawful route result |
+| identity       | DOP               | `dop_kid`   | `id_artifact.hash`    | Credential signature validation |
+| evidence       | DOP + SAPP        | `dop_kid`, `sapp_kid` | `evidence.merkle_root` | Merkle proof includes normalization + route hashes |
+
+**Success Criterion:** RTGF deterministically recomputes hashes, verifies signatures via JWKS, and builds a unified replay manifest without missing or ambiguous fields.
+
 ---
 
 **Success Criterion:** all five repositories deliver their modules so that, when composed, the system demonstrates deterministic orchestration, context fusion, mock identity verification, lawful routing, and audit-grade evidence generation with RTGF providing unified replay governance.
