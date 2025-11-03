@@ -48,7 +48,10 @@ This scope document describes how RTGF integrates with the broader deterministic
 - **Purpose:** Demonstrate lawful routing and cryptographic compliance for automated payments.  
 - **aARP:** Validates jurisdictional corridors via mock IMT/RMT tokens; denies routing when invalid.  
 - **SAPP:** Wraps payment execution with mock federation contract, evidence bundle, and liability propagation.  
-- **Integration:** DOP `/route` queries aARP for “lawful route ok”; `/evidence/contract` triggers SAPP to attach mock compliance evidence (Merkle root + demo signatures).  
+- **Integration:** DOP `/route` first calls the mock aARP service for “lawful route ok”.  
+  When authorization succeeds, DOP **mints** a compliance evidence bundle in SAPP via `POST /sapp/v1/evidence` and receives the bundle’s `evidence_id` and `merkle_root`.  
+  DOP then **retrieves** the completed bundle with `GET /sapp/v1/evidence/{evidence_id}` and embeds its root and signatures into `/dop/v1/evidence/contract`.  
+  This explicit mint → retrieve → attach sequence replaces the earlier implicit “attach bundle” wording and matches the Evidence API semantics defined later in this scope.  
 - **Goal:** Show deterministic, regulation-compliant transaction flow without real money movement.
 
 ---
