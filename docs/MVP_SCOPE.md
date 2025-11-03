@@ -218,4 +218,38 @@ Producers call the webhook immediately after artifact creation (or within 15 min
 
 ---
 
+## Deterministic Distribution of Ontology Artifacts
+
+All repositories rely on common dictionaries, rubrics, and schemas. To keep every consumer pinned to the same deterministic inputs, Ontology artifacts are distributed via **versioned releases** with signed manifests.
+
+- Each release ships a manifest of checksums and signatures:
+  ```json
+  {
+    "version": "v0.1.0",
+    "checksums": {
+      "dictionaries/pay-v0.1.json": "sha256:...",
+      "rubrics/confidence-v0.1.json": "sha256:..."
+    },
+    "signature": "ed25519:..."
+  }
+  ```
+- DOP, CaaS, aARP/SAPP, and RTGF verify these checksums during start-up before caching any ontology artifact.
+
+### Manifest Location
+
+The signed manifest is checked into this repository at:
+```
+ontology/
+ └─ manifests/
+     └─ checksum-manifest.json
+```
+
+During release packaging the same file is copied to the root of the artifact archive. Downstream tooling MUST accept either path:
+- `ontology/manifests/checksum-manifest.json` (working tree / submodule), or  
+- `checksum-manifest.json` (release archive root).
+
+This explicit location guarantees that validation scripts can locate the manifest deterministically and verify the Ed25519 signature prior to consuming any ontology asset.
+
+---
+
 **Success Criterion:** all five repositories deliver their modules so that, when composed, the system demonstrates deterministic orchestration, context fusion, mock identity verification, lawful routing, and audit-grade evidence generation with RTGF providing unified replay governance.
