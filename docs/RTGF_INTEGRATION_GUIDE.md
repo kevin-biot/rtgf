@@ -1,0 +1,228 @@
+# RTGF Integration Guide
+
+This guide explains how other MVP repositories (CaaS, mini-CaaS/DOP-lib, DOP, aARP, SAPP) integrate with the Replay & Trace Governance Fabric (RTGF). It covers artifact formats, ingestion APIs, validation rules, error handling, and replay access so every team can publish deterministic evidence that RTGF can verify and expose.
+
+---
+
+## 1. Audience & Scope
+
+| Audience | Responsibility |
+|----------|----------------|
+| CaaS / mini-CaaS teams | Emit signed context artifacts and deliver them to RTGF. |
+| DOP team | Post normalization, routing, identity, evidence bundles; consume replay APIs. |
+| aARP / SAPP teams | Publish compliance evidence, corridor verdicts, and Merkle proofs. |
+| QA / Observability | Monitor ingestion success, integrity metrics, and replay accuracy. |
+
+RTGF ingests signed artifacts, verifies hashes and signatures, confirms cross-component linkages, and produces a unified replay manifest per `trace_id`. All integrations MUST follow this guide to maintain deterministic behaviour.
+
+---
+
+## 2. Artifact Contract (Recap)
+
+Every artifact posted to RTGF must conform to the shared JSON Schema (`https://ontology.example.com/schema/evidence-bundle.json`):
+
+```json
+{
+  "trace_id": "trc-1A2B3C4D",
+  "artifact_type": "context",
+  "producer": "caas",
+  "schema_version": "v0.1.0",
+  "payload": { /* producer-specific content */ },
+  "hash": "sha256:…",          // SHA-256 over RFC 8785 canonical JSON of payload
+  "signature": {
+    "alg": "EdDSA",
+    "kid": "caas_kid_2025-10",
+    "value": "base64(signature_bytes)"
+  }
+}
+```
+
+Key rules:
+
+1. **Canonical JSON** – before hashing, render `payload` using RFC 8785 canonicalization.  
+2. **Hash Format** – hash string MUST be `sha256:<hex_digest>`.  
+3. **Trace IDs** – follow `trc-<alphanumeric>` and propagate unchanged across components.  
+4. **Linkage Invariants** –  
+   - DOP `normalization.hash` == routing bundle `linked_hash`.  
+   - Evidence Merkle root includes normalization + routing hashes.  
+5. **Signature Algorithm** – Ed25519 (EdDSA) using keys advertised via JWKS (see §3).
+
+---
+
+## 3. Key Distribution & Trust
+
+| Producer  | JWKS URL                                             | Rotation | Scope                         |
+|-----------|------------------------------------------------------|----------|-------------------------------|
+| CaaS      | `https://caas.example.com/.well-known/jwks.json`     | 90 days  | Context artifacts             |
+| mini-CaaS | device-registered JWKS                              | device   | Local context artifacts       |
+| DOP       | `https://dop.example.com/.well-known/jwks.json`      | 90 days  | Normalization, routing, evidence, identity |
+| aARP      | `https://aarp.example.com/.well-known/jwks.json`     | 180 days | Lawful route token proofs     |
+| SAPP      | `https://sapp.example.com/.well-known/jwks.json`     | 180 days | Compliance bundles            |
+
+- RTGF caches JWKS for 24 hours, refreshing on signature verification failure.  
+- Producers MUST rotate keys on the listed cadence and communicate upcoming `kid` changes.  
+- During development you may use static JWKS served via `http://localhost:<port>/.well-known/jwks.json`.
+
+---
+
+## 4. Ingestion APIs
+
+### 4.1 Webhook Ingestion (Preferred)
+
+```
+POST /rtgf/v1/ingest
+Content-Type: application/json
+Authorization: Bearer <token>    # or mutual TLS client cert
+```
+
+Body:
+
+```json
+{
+  "artifacts": [
+    { /* UnifiedEvidenceBundle */ },
+    { /* Up to 20 per request */ }
+  ]
+}
+```
+
+Response (`202 Accepted`):
+
+```json
+{
+  "status": "accepted",
+  "results": [
+    {"trace_id": "trc-1A2B3C4D", "artifact_type": "context", "status": "ok"},
+    {"trace_id": "trc-1A2B3C4D", "artifact_type": "route", "status": "hash_mismatch"}
+  ]
+}
+```
+
+**Authentication:**  
+You may choose one of: mutual TLS (client certificate) or OAuth2 Client Credentials. Tokens should map to a specific producer (e.g., `aud:rtgf-ingest`, `sub:caas`).
+
+**Batching:**  
+Maximum 20 artifacts per request. If offline, queue artifacts and post within 15 minutes of reconnecting.
+
+### 4.2 File Drop / Pull (Fallback)
+
+- Upload JSONL batches to `/exports/YYYY/MM/DD/caas-artifacts.jsonl`.  
+- Format: one `UnifiedEvidenceBundle` per line.  
+- RTGF crawler polls hourly, with the same validation pipeline.  
+- Use when network connectivity prevents webhook delivery for extended periods.
+
+---
+
+## 5. Validation Pipeline
+
+For each artifact RTGF performs:
+
+1. **Schema Validation** – Check against the unified schema.  
+2. **Hash Re-computation** – Canonicalize `payload`, recompute `sha256`, compare to `hash`.  
+3. **Signature Verification** – Resolve `kid` from JWKS, verify Ed25519 signature over canonical payload.  
+4. **Linkage Checks** – For route/evidence bundles ensure cross-hash references match the expected linkage rules.  
+5. **Merkle Proof Verification** (if `artifact_type == "evidence"`).  
+6. **Persistence** – Store validated artifact and computed integrity flags in SQLite (MVP) for 7 days.
+
+Failures generate:
+
+- Webhook callback: `POST {component}/v1/integrity/failure` with details.  
+- Prometheus counters: `rtgf_integrity_failures_total{component,reason}`.  
+- Optional email/Slack alert (if configured).
+
+---
+
+## 6. Replay & Audit APIs
+
+### 6.1 Fetch Unified Replay
+
+```
+GET /rtgf/v1/replay/{trace_id}
+Accept: application/json
+```
+
+Response:
+
+```json
+{
+  "trace_id": "trc-1A2B3C4D",
+  "components": {
+    "caas": { "artifact_id": "caas-...", "hash": "...", "sig_ok": true },
+    "mini_caas": { ... },
+    "dop": { "normalization": {...}, "route": {...}, "evidence": {...} },
+    "aarp": { ... },
+    "sapp": { ... }
+  },
+  "integrity": {
+    "hash_ok": true,
+    "sig_ok": true,
+    "linkage_ok": true,
+    "merkle_ok": true
+  },
+  "generated_at": "2025-11-02T11:42:18Z"
+}
+```
+
+Optional `?format=html` returns a human-readable report for demos.
+
+### 6.2 Diff Two Runs (optional MVP stretch)
+
+```
+GET /rtgf/v1/replay/diff?trace_id=...&other_trace_id=...
+```
+
+Use to compare deterministic runs (e.g., before/after schema changes).
+
+---
+
+## 7. Local Development & Testing
+
+1. **Install dependencies** (Node or Python verifier—TBD).  
+2. **Run RTGF dev server:** `npm run dev` or `uvicorn main:app --reload`.  
+3. **Configure local JWKS:** add entries in `config/jwks_local.json` for each component.  
+4. **Send sample artifact:**  
+   ```bash
+   curl -X POST http://localhost:8080/rtgf/v1/ingest \\
+     -H "Content-Type: application/json" \\
+     -d @samples/trace-001.json
+   ```  
+5. **Check replay:** `curl http://localhost:8080/rtgf/v1/replay/trc-LOCAL01`.
+
+Sample artifacts and scripts should live under `examples/rtgf/`.
+
+---
+
+## 8. Observability & SLAs
+
+- **Metrics:** `rtgf_ingest_total`, `rtgf_verification_latency_seconds`, `rtgf_integrity_failures_total`.  
+- **SLOs:**  
+  - 99% of artifacts verified within 60 seconds of receipt.  
+  - Integrity false positives <0.1%.  
+  - Replay endpoint availability ≥ 99.9%.  
+- **Dashboard:** Grafana dashboard `RTGF / Ingestion` summarises ingestion volume, failure rate, and top reasons.  
+- **Alerts:** configure anomalies for hash mismatches, signature failures, missing JWKS, and replay latency.
+
+---
+
+## 9. Reference Checklist (per Repository)
+
+| Step | Description | Owner |
+|------|-------------|-------|
+| 1 | Generate evidence bundle using shared schema & canonicalization rules | Producer |
+| 2 | Sign payload with Ed25519 key advertised in JWKS | Producer |
+| 3 | POST artifact to `/rtgf/v1/ingest` (≤15 min delay if batching) | Producer |
+| 4 | Monitor `results` array; on failure inspect callback payload | Producer |
+| 5 | Retrieve replay via `/rtgf/v1/replay/{trace_id}` for demos/tests | Producer / QA |
+| 6 | Address any integrity alarms surfaced by RTGF | Producer & RTGF |
+
+---
+
+## 10. Appendix
+
+- **Ontology Manifests:** See `ontology/manifests/checksum-manifest.json` for signed artifact checksums. Validate before using dictionaries or rubrics in your service.  
+- **Schema Updates:** RTGF increments `schema_version` when structure changes; coordinate across repos before adopting new versions.  
+- **Contact:** For integration issues, open an issue tagged `rtgf-integration` or ping the RTGF team on the shared comms channel.
+
+---
+
+By following this guide, each MVP repository can feed RTGF with deterministic, verifiable artifacts, enabling unified replay and audit visibility across the entire automation stack.

@@ -84,6 +84,8 @@ rtgf verify ./out/RMT-EU-AI-2025-10-22.json
 - `docs/policy/BIG_PICTURE.md` — end-to-end ingestion summary.
 - `docs/corridors/process/PROCESS_AND_MAPPING.md` — corridor S0–S7 workflow.
 - `docs/mandala/alignment.md` — Mandala proof interoperability guide.
+- `docs/MVP_SCOPE.md` — unified deterministic automation MVP scope across CaaS, DOP, aARP/SAPP, and RTGF.
+- `docs/RTGF_INTEGRATION_GUIDE.md` — practical integration steps for posting evidence bundles and consuming replay APIs.
 
 ---
 
