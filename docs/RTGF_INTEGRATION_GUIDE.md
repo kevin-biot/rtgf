@@ -28,8 +28,8 @@ Every artifact posted to RTGF must conform to the shared JSON Schema (`https://o
   "producer": "caas",
   "schema_version": "v0.2.1",
   "payload": { /* producer-specific content */ },
-  "hash": "sha256:…",          // SHA-256 over RFC 8785 canonical JSON of payload
-  "signature": {
+"hash": "sha256:…",          // SHA-256 over RFC 8785 canonical JSON of payload
+"signature": {
     "alg": "EdDSA",
     "kid": "caas_kid_2025-10",
     "value": "base64(signature_bytes)"
@@ -47,6 +47,10 @@ Key rules:
    - Evidence Merkle root includes normalization + routing hashes.  
 5. **Signature Algorithm** – Ed25519 (EdDSA) using keys advertised via JWKS (see §3).  
    The signature MUST cover the canonical JSON of the entire object *excluding* the `signature` field.
+   ```json
+   // signature input (canonicalized)
+   {"artifact_type":"context","hash":"sha256:…","payload":{...},"producer":"caas","schema_version":"v0.2.1","trace_id":"trc-1A2B3C4D"}
+   ```
 
 ---
 
@@ -76,7 +80,7 @@ Even before live compiler integration, RTGF hosts a deterministic token catalogu
 | `GET /tokens/{type}/{slug}` | Alternate lookup using type/slug (e.g., `/tokens/rmt/eu-psd3-2025`) | Type comparison is case-insensitive. |
 | `GET /catalog` | List available tokens, issuers, corridors | Used by aARP/SAPP to preload fixtures. |
 | `GET /.well-known/rtgf/catalog.json` | Alias of `/catalog` for future compatibility | |
-| `GET /jwks.json` | JWKS for token signatures | Matches the fixtures served; honour `Cache-Control/max-age`, refresh on unknown `kid`. |
+| `GET /.well-known/jwks.json` | JWKS for token signatures | Matches the fixtures served; honor `Cache-Control: max-age`, refresh on unknown `kid`. |
 | `GET /healthz` | Liveness check | Returns `{"status":"ok"}`. |
 
 **Example**
@@ -125,10 +129,13 @@ Response (`202 Accepted`):
 ```
 
 **Authentication:**  
-You may choose one of: mutual TLS (client certificate) or OAuth2 Client Credentials. Tokens should map to a specific producer (e.g., `aud:rtgf-ingest`, `sub:caas`).
+You may choose one of: mutual TLS (client certificate) or OAuth2 Client Credentials. Tokens should map to a specific producer (e.g., `aud:rtgf-ingest`, `sub:caas`). Include `Authorization: Bearer <token>` in OAuth scenarios.
 
-**Batching:**  
-Maximum 20 artifacts per request. If offline, queue artifacts and post within 15 minutes of reconnecting.
+**Batching & idempotency:**  
+Maximum 20 artifacts per request. If offline, queue artifacts and post within 15 minutes of reconnecting. Clients MAY send an `Idempotency-Key` header; RTGF MUST deduplicate identical key+body pairs for 24 hours.
+
+**Rate limits:**  
+Expect `429 Too Many Requests` when back-pressure is active. Respect the `Retry-After` header (seconds) before retrying and apply exponential backoff/circuit-breaking on repeated 429/5xx responses.
 
 ### Result Codes
 
