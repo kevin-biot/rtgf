@@ -1,91 +1,104 @@
-# ADR-RTGF-003: Compiler & Deterministic Build Pipeline — Rev for Acceptance
+# ADR-RTGF-003: Compiler & Deterministic Build Pipeline
 
-**Status:** Proposed → *Ready for Acceptance review*  
+**Status:** Accepted  
 **Date:** 2025-11-02  
 **Decision Makers:** RTGF Working Group  
-**Owner:** RTGF Working Group  
-**Target Acceptance:** 2026-01-31  
-**Related ADRs:** ADR-RTGF-001, ADR-RTGF-002
+**Owner:** Compiler & Evidence Subsystem Team  
+**Related ADRs:** ADR-RTGF-001 (Policy Source Matrix), ADR-RTGF-002 (Sanctions Hashing), ADR-RTGF-004 (Token Encodings)
+
+**Planned Tests:** RTGF-CT-20, RTGF-CT-21, RTGF-CT-22, RTGF-CT-23
 
 ---
 
 ## 1. Purpose & Scope
-Define the RTGF compiler pipeline that transforms policy snapshots into deterministic RMT/IMT/CORT tokens, guaranteeing reproducibility, provenance, and security boundaries across jurisdictions and domains.
+Provide a reproducible, hermetic build pipeline that converts signed policy snapshots into canonical RTGF artefacts (predicate sets, evaluation plans, RMT/IMT/CORT tokens) with deterministic outputs, cryptographic provenance, and fail-closed security controls.
 
-## 2. Architecture Overview
+## 2. Decision
+Adopt the following staged pipeline:
+
+```mermaid
+flowchart LR
+  Snapshot[PolicySnapshotFetcher] --> Validator[SchemaValidator]
+  Validator --> Planner[DeterministicPlanner]
+  Planner --> Compiler[PredicateCompiler]
+  Compiler --> TokenAssembler
+  Planner -.-> EvidenceHasher
+  EvidenceHasher --> TokenAssembler
+  TokenAssembler --> Signer[ArtefactSigner]
+  Signer --> Transparency[TransparencyLogger]
 ```
-PolicySnapshotFetcher → SchemaValidator → DeterministicPlanner → PredicateCompiler
-      ↓                                            ↓
-EvidenceHasher --------------------------> TokenAssembler → ArtefactSigner → TransparencyLogger
-```
-- **PolicySnapshotFetcher:** retrieves signed snapshots per ADR-RTGF-001.  
-- **SchemaValidator:** enforces JSON-LD schema & signature validation.  
-- **DeterministicPlanner:** sorts predicates, applies canonical ordering, builds eval plans.  
-- **PredicateCompiler:** generates predicate sets (PPE compiler).  
-- **EvidenceHasher:** records external dataset hashes (ADR-RTGF-002).  
-- **TokenAssembler:** constructs RMT/IMT with canonical fields, references.  
-- **ArtefactSigner:** applies Ed25519 signatures using controlled keys.  
-- **TransparencyLogger:** appends artefact metadata/hashes for audit.
+
+- **PolicySnapshotFetcher:** retrieve signed snapshots (ADR-RTGF-001), verify manifest checksums, enforce ontology version.  
+- **SchemaValidator:** validate JSON-LD + signature; fail closed on mismatch.  
+- **DeterministicPlanner:** order predicates/evidence, capture toolchain + ontology versions in `build_manifest.json`.  
+- **PredicateCompiler:** generate predicate set & evaluation plan using shared schemas.  
+- **EvidenceHasher:** compute SHA-256 (RFC 8785 canonical JSON) across external datasets (ADR-RTGF-002).  
+- **TokenAssembler:** build canonical RMT/IMT/CORT tokens (ADR-RTGF-004) embedding manifest IDs, evidence hashes, revEpoch baseline.  
+- **ArtefactSigner:** sign canonical JSON with Ed25519 keys via HSM, record signature metadata.  
+- **TransparencyLogger:** append artefact hashes + manifest references to transparency service for independent audit.
 
 ## 3. Determinism & Provenance
-- Inputs pinned by snapshot version and evidence hashes.  
-- JSON serialization via RFC 8785 canonical form; stable key sorting.  
-- Build graph recorded in `build_manifest.json` with tool versions.  
-- Hashes: `sha256` for predicate plans, `sha512` for token body, both logged.  
-- revEpoch increments on token revocation; compile step captures snapshot revEpoch baseline.  
-- Deterministic environment variables: `TZ=UTC`, `LANG=C`, `RTGF_SEED=1337`.
+- All inputs pinned to snapshot version, evidence hashes, and ontology manifest (`ontology/manifests/checksum-manifest.json`).  
+- Canonical JSON (RFC 8785) for predicate sets, plans, and tokens; stable key ordering.  
+- `build_manifest.json` records toolchain versions, deterministic seeds, evidence claims.  
+- Hash conventions: `sha256` for predicate/plan outputs; `sha512` for canonical token envelopes.  
+- Deterministic runtime environment: enforce `TZ=UTC`, `LANG=C`, `RTGF_SEED=1337`.  
+- revEpoch baseline captured during build; later revocations increment transparently.
 
 ## 4. Security & Trust
-- Compiler runs inside hermetic container; dependencies hashed.  
-- Input snapshots verified against regulator JWKS; fail-closed.  
-- Signing keys stored in HSM; access via mTLS.  
-- ArtefactSigner attaches JWS with key rotation policy (ADR-RTGF-006).  
-- Pipeline requires authenticated operator invocation (RBAC).
+- Pipeline runs in hermetic container with pinned dependencies.  
+- Snapshot signatures verified against regulator JWKS; build aborts on failure.  
+- Signing keys stored in HSM; access via mTLS; dual-control for release operations.  
+- Transparency logger ensures each artefact has traceable provenance.  
+- RBAC approvals for build/publish operations recorded in audit log.
 
 ## 5. Error Taxonomy
 | Code | Condition | Action |
 |------|----------|--------|
-| RTGF_BUILD_SNAPSHOT_INVALID | Signature/schema failure | halt build |
-| RTGF_BUILD_PLAN_DIVERGENCE | Non-deterministic ordering detected | fail |	null |
-| RTGF_BUILD_SIGNING_ERROR | HSM signing failure | retry ×3 then fail |
-| RTGF_BUILD_HASH_MISMATCH | Post-signature hash mismatch | abort, alert SRE |
+| `RTGF_BUILD_SNAPSHOT_INVALID` | Snapshot signature/schema invalid | Abort build, alert operator |
+| `RTGF_BUILD_PLAN_DIVERGENCE` | Deterministic diff mismatch | Halt promotion, diff manifests |
+| `RTGF_BUILD_SIGNING_ERROR` | HSM signing failure | Retry ×3 then fail closed |
+| `RTGF_BUILD_HASH_MISMATCH` | Post-signature digest mismatch | Abort; investigate integrity |
+| `RTGF_BUILD_TRANSPARENCY_FAIL` | Transparency append failure | Retry, then fail closed |
 
 ## 6. Metrics & SLOs
 | Metric | Target | Notes |
 |--------|--------|-------|
-| Build duration | ≤ 5 min per jurisdiction/domain | assuming cached datasets |
-| Plan determinism checks | 100 % pass rate | double-run diff |
-| Signing success rate | ≥ 99.99 % | per artefact |
+| `rtgf_build_duration_seconds_bucket` | ≤ 5 min P95 per jurisdiction/domain | assuming cached datasets |
+| Determinism diff check | 100% pass | compile twice, compare hashes |
+| Signing success rate | ≥ 99.99% | per artefact |
+| Transparency append latency | ≤ 1 min P95 | measured end-to-end |
 
 ## 7. Interfaces & Integration
 | Dependency | Direction | Purpose |
 |------------|-----------|---------|
-| Policy Source Matrix | inbound | Consume signed snapshots |
-| Sanctions dataset fetcher | inbound | Provide evidence hashes |
-| Transparency log | outbound | Append build manifest, token metadata |
-| Revocation service | outbound | Seed revEpoch baseline |
-| PPE evaluator test harness | outbound | Validate tokens via round-trip |
+| Policy Source Matrix | inbound | Retrieve signed policy snapshots |
+| Sanctions dataset fetcher | inbound | Provide data for evidence hashing |
+| Transparency service | outbound | Log manifests, artefact digests |
+| Revocation service | outbound | Capture baseline `revEpoch` |
+| PPE evaluator harness | outbound | Execute deterministic round-trip tests |
 
-## 8. Metrics & Observability
-- Prometheus: `rtgf_build_duration_seconds_bucket`, `rtgf_build_failures_total{code}`, `rtgf_artifact_sign_total`.  
-- Structured logs include snapshot IDs, tool versions, digests.  
-- OpenTelemetry trace: span `rtgf.compiler.run`, child spans per stage.
+## 8. Observability
+- Prometheus: `rtgf_build_duration_seconds_bucket`, `rtgf_build_failures_total{code}`, `rtgf_artifact_sign_total`, `rtgf_transparency_append_total{result}`.  
+- Structured logs: snapshot ID, manifest ID, tool versions, hash digests.  
+- OpenTelemetry span `rtgf.compiler.run` with child spans per stage (validation, compile, signing, transparency).
 
-## 9. Acceptance Tests
+## 9. Planned Tests
 | Test ID | Scenario | Expected Outcome |
 |---------|----------|------------------|
-| RTGF-CT-20 | Compile snapshot twice | identical digests, no diff |
-| RTGF-CT-21 | Invalid snapshot signature | build fails with `RTGF_BUILD_SNAPSHOT_INVALID` |
-| RTGF-CT-22 | Evidence hash mismatch | build aborts, transparency log untouched |
-| RTGF-CT-23 | Artefact signing failure simulation | retries then surfaces `RTGF_BUILD_SIGNING_ERROR` |
+| RTGF-CT-20 | Compile snapshot twice | Hashes/manifests identical across runs |
+| RTGF-CT-21 | Invalid snapshot signature | Build stops with `RTGF_BUILD_SNAPSHOT_INVALID` |
+| RTGF-CT-22 | Evidence hash mismatch | Build aborts pre-signing; no transparency entry |
+| RTGF-CT-23 | HSM signing failure simulation | Retry ×3 then emit `RTGF_BUILD_SIGNING_ERROR` |
 
 ## 10. Acceptance Criteria
-1️⃣ Compiler outputs deterministic artefacts (predicate set, eval plan, tokens) with identical digests across runs.  
-2️⃣ All artefacts signed and logged with provenance metadata.  
-3️⃣ Pipeline fails closed on input validation, hash mismatch, or signing errors.  
-4️⃣ Metrics and traces emitted for each stage; CT-20..23 pass.
+1. Pipeline emits identical artefacts (predicate sets, eval plans, RMT/IMT/CORT tokens) for identical inputs; diff manifests identical.  
+2. All outputs signed, logged, and linked to transparency entries; replay tooling can recompute hashes.  
+3. Build halts on any validation/signing/transparency failure (fail-closed).  
+4. Observability instrumentation deployed; CT-20..23 passing in CI.
 
-## Consequences
-- ✅ Reproducible tokens build trust with regulators and verifiers.  
-- ✅ Transparency hooks facilitate independent audits.  
-- ⚠️ Hermetic builds require disciplined dependency management and HSM integration.
+## 11. Consequences
+- ✅ Ensures regulators and auditors can reproduce RTGF artefacts independently.  
+- ✅ Transparency manifests accelerate cross-system replay validation.  
+- ⚠️ Hermetic builds & deterministic double-runs increase compute cost and require dependency pinning/HSM automation.  
+- ⚠️ Operators must maintain ontology & toolchain manifests; stale manifests block builds.
