@@ -1,100 +1,115 @@
-# ADR-RTGF-007: Transparency & Proof Bundles for RTGF — Rev for Acceptance
+# ADR-RTGF-007: Transparency & Proof Bundles for RTGF
 
-**Status:** Proposed → *Ready for Acceptance review*  
+**Status:** Accepted  
 **Date:** 2025-11-02  
 **Decision Makers:** RTGF Working Group  
-**Owner:** RTGF Working Group  
-**Target Acceptance:** 2026-01-31  
-**Related ADRs:** ADR-RTGF-001, ADR-RTGF-002
+**Owner:** Transparency & Audit Subsystem Team  
+**Related ADRs:** ADR-RTGF-003 (Compiler Pipeline), ADR-RTGF-004 (Token Encodings), ADR-RTGF-006 (Trust Model)
+
+**Planned Tests:** RTGF-CT-60, RTGF-CT-61, RTGF-CT-62, RTGF-CT-63, RTGF-CT-64
 
 ---
 
 ## 1. Purpose & Scope
-Define the RTGF transparency and proof system that anchors policy snapshots, compiler artefacts, tokens, and revocation events into append-only logs. Proof bundles allow external auditors and partners to verify integrity and inclusion without trusted intermediaries.
+Define the transparency log and proof bundle architecture that records policy snapshots, compiler artefacts, tokens, JWKS rotations, and revocation events in an append-only Merkle structure. Provide auditors/verifiers with deterministic proof bundles that require no trusted intermediary.
 
-## 2. Architecture Overview
+## 2. Decision
+Adopt a transparency service with the following flow:
+
+```mermaid
+flowchart LR
+  Producers[Compiler/Revocation/JWKS] --> Ingest[Transparency Ingest]
+  Ingest --> Merkle[Merkle Tree Builder]
+  Merkle --> Roots[Signed Tree Heads]
+  Merkle --> Proofs[Proof Generator]
+  Proofs --> BundlesAPI[Bundles API]
+  Roots --> TransparencyLog[Transparency Store]
+  BundlesAPI --> Auditors[External Auditors & RTGF]
 ```
-Event Producers (compiler, revocation, jwks) → Transparency Ingest → Merkle Tree Builder
-                                                             ↓
-                                                       Proof Generator → Bundles API
-                                                             ↓
-                                                  External Auditors / Verifiers
-```
-- **Transparency Ingest:** accepts signed events (`policy_snapshot`, `token_issue`, `revocation`, `jwks_publish`).  
-- **Merkle Tree Builder:** batches events, updates Merkle root, signs tree heads.  
-- **Proof Generator:** provides inclusion proofs (RFC 6962 style) and consistency proofs.  
-- **Bundles API:** exposes `/proofs/<event_id>` and `/roots/latest` via registry.
+
+- **Ingest:** accept signed events (`policy_snapshot`, `token_issue`, `revocation`, `jwks_publish`).  
+- **Merkle Builder:** batch events, update Merkle root, sign tree heads (Ed25519 transparency key).  
+- **Proof Generator:** issue inclusion/consistency proofs (RFC 6962 style).  
+- **Bundles API:** expose `/proofs/{event_id}`, `/roots/latest`, and batch export endpoints.  
+- **Transparency Store:** persist tree state, manifests, and signatures for replay.
 
 ## 3. Determinism & Provenance
-- All events serialized via JCS before hashing (`sha256`).  
-- Event IDs follow `evt:<type>:<timestamp>:<uuid>` with deterministic timestamp (UTC).  
-- Signed tree heads include `tree_size`, `root_hash`, `signature`.  
-- Proof bundles packaged as deterministic JSON:
+- Events serialized via RFC 8785 canonical JSON; leaf hash `sha256(canonical_event)`.  
+- Event IDs follow `evt:<type>:<UTC timestamp>:<uuid>` (clock synchronised via NTP).  
+- Signed tree heads include `tree_size`, `root_hash`, `signature`, `issued_at`.  
+- Proof bundle JSON deterministic: stable key order, arrays sorted.  
+- Transparency log stores manifest linking event → token artefact → evidence hashes.
+
+Example proof bundle:
 ```json
 {
   "eventId": "evt:token_issue:2025-11-02T10:00:00Z:1234",
-  "merkleRoot": "sha256:...",
-  "leafHash": "sha256:...",
-  "path": ["sha256:...", "..."],
-  "consistency": ["sha256:..."],
+  "merkleRoot": "sha256:…",
+  "leafHash": "sha256:…",
+  "path": ["sha256:…", "sha256:…"],
+  "consistency": ["sha256:…"],
   "issuedAt": "2025-11-02T10:00:05Z",
-  "signatures": [...]
+  "signatures": [
+    {"alg": "EdDSA", "kid": "transparency:2025-10:001", "value": "…"}
+  ]
 }
 ```
 
 ## 4. Security & Trust
-- Transparency service authenticated via mTLS; ingestion requires signed payloads.  
-- Tree head signatures use dedicated transparency key pair anchored in ADR-RTGF-006 trust model.  
-- Access control on proof API (read-mostly) but public auditors allowed.  
-- Monitoring for append-only property; detection of inconsistent roots triggers incident.
+- Transparency ingest requires mTLS and signed payloads; invalid signatures rejected.  
+- Tree head signatures use dedicated transparency key pair anchored by ADR-RTGF-006.  
+- Bundles API read-mostly; auditor access uses API keys/mTLS.  
+- Append-only property monitored; inconsistency triggers incident response.  
+- Optional cross-log gossip with external logs to detect equivocation.
 
 ## 5. Error Taxonomy
 | Code | Condition | Action |
 |------|----------|--------|
-| RTGF_TXP_EVENT_INVALID | Ingest payload fails schema/signature | reject |
-| RTGF_TXP_APPEND_VIOLATION | Attempted append breaks Merkle invariants | halt, alert |
-| RTGF_TXP_PROOF_NOT_FOUND | Event ID absent | return 404 |
-| RTGF_TXP_ROOT_SIGNATURE_INVALID | Tree head signature fail | mark root invalid, alert |
+| `RTGF_TXP_EVENT_INVALID` | Event payload fails schema/signature | Reject, log error |
+| `RTGF_TXP_APPEND_VIOLATION` | Append breaks Merkle invariants | Halt ingest, alert SRE |
+| `RTGF_TXP_PROOF_NOT_FOUND` | Proof requested for missing event | Return 404 |
+| `RTGF_TXP_ROOT_SIGNATURE_INVALID` | Tree head signature invalid | Mark root invalid, raise incident |
+| `RTGF_TXP_GOSSIP_INCONSISTENT` | Cross-log comparison fails | Alert, initiate investigation |
 
 ## 6. Metrics & SLOs
 | Metric | Target | Notes |
-|--------|--------|------|
-| Proof generation latency | ≤ 500 ms P95 | inclusion proof |
-| Root publication interval | ≤ 5 min | running tree head exposure |
-| Append symmetry checks | 100 % | each append validated |
-| Availability | ≥ 99.9 % | Bundles API uptime |
+|--------|--------|-------|
+| Proof generation latency | ≤ 500 ms P95 | inclusion proofs |
+| Root publication interval | ≤ 5 min | tree head exposure |
+| Append validation coverage | 100% | each append verified |
+| Bundles API availability | ≥ 99.9% | measured monthly |
 
 ## 7. Interfaces & Integration
 | Dependency | Direction | Purpose |
 |------------|-----------|---------|
-| Compiler | inbound | Record token issuance events |
-| Revocation service | inbound | Append revocation updates |
-| JWKS generator | inbound | Anchor key rotations |
-| Auditors/verifiers | outbound | Provide proof bundles |
-| External logs (optional cross-log) | outbound | Gossip / consistency proofs |
+| Compiler | inbound | Log token issuance events |
+| Revocation service | inbound | Log revocation updates |
+| JWKS generator | inbound | Anchor JWKS rotations |
+| Auditors/Verifiers | outbound | Provide proofs & roots |
+| External logs | outbound | Cross-gossip consistency checks |
 
-## 8. Metrics & Observability
-- Prometheus: `rtgf_transparency_ingest_total{result,type}`, `rtgf_transparency_proof_latency_ms_bucket`, `rtgf_transparency_root_publish_total`.  
-- Audit logs for each event with leaf hash, tree size.  
-- Alerting on append violations, proof failures, or root signature issues.
+## 8. Observability
+- Prometheus: `rtgf_transparency_ingest_total{result,type}`, `rtgf_transparency_proof_latency_ms_bucket`, `rtgf_transparency_root_publish_total{result}`, `rtgf_transparency_append_failures_total`.  
+- Audit logs: event ID, leaf hash, tree size, signature KID, caller identity.  
+- Alerts: append violations, proof generation failures, root signature mismatches, gossip inconsistencies.
 
-## 9. Acceptance Tests
+## 9. Planned Tests
 | Test ID | Scenario | Expected Outcome |
 |---------|----------|------------------|
-| RTGF-CT-60 | Issue token & retrieve proof | proof verifies against root |
-| RTGF-CT-61 | Simulate tampered payload | ingestion rejects with `RTGF_TXP_EVENT_INVALID` |
-| RTGF-CT-62 | Request unknown event | returns 404 `RTGF_TXP_PROOF_NOT_FOUND` |
-| RTGF-CT-63 | Consistency proof check | verifies across sequential roots |
-| RTGF-CT-64 | Append violation test | service halts and raises alert |
+| RTGF-CT-60 | Issue token & retrieve proof | Proof verifies against root |
+| RTGF-CT-61 | Tampered payload | Reject with `RTGF_TXP_EVENT_INVALID` |
+| RTGF-CT-62 | Unknown event proof | 404 `RTGF_TXP_PROOF_NOT_FOUND` |
+| RTGF-CT-63 | Consistency proof check | Valid across sequential roots |
+| RTGF-CT-64 | Append violation | Service halts, incident raised |
 
 ## 10. Acceptance Criteria
-1️⃣ All issuance, revocation, and key events recorded with deterministic hashes and retrievable proofs (CT-60..64 green).  
-2️⃣ Transparency log enforces append-only property with signed roots and consistency checks.  
-3️⃣ Proof bundle format documented; verifiers can validate tokens using bundles without trusted access.  
-4️⃣ Monitoring detects anomalies in root publication or append operations.
+1. All issuance/revocation/JWKS events recorded with deterministic hashes and retrievable proofs; CT-60..64 pass.  
+2. Transparency log enforces append-only property with signed tree heads and consistency proofs.  
+3. Proof bundle format documented; verifiers can validate without trusted access.  
+4. Observability detects anomalies in root publication, proof generation, or append operations.
 
-## Consequences
-- ✅ External auditors can verify the integrity of RTGF artefacts without trusting the issuer.  
-- ✅ Cross-log gossip enables detection of equivocation.  
-- ⚠️ Operating a transparency log requires reliable storage and signature infrastructure.  
-- ⚠️ Clients must implement proof verification to gain full benefits.
+## 11. Consequences
+- ✅ External auditors can verify RTGF artefacts independently.  
+- ✅ Cross-log gossip detects equivocation attempts.  
+- ⚠️ Transparency infrastructure requires reliable storage and signature management.  
+- ⚠️ Consumers must implement proof verification to benefit from transparency guarantees.
