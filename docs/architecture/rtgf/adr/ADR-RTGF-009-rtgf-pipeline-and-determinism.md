@@ -18,13 +18,13 @@ Adopt the following pipeline:
 
 ```mermaid
 flowchart LR
-  Watcher[Snapshot Watcher] --> Orchestrator[Build Orchestrator]
-  Orchestrator --> Compiler[Compiler (ADR-RTGF-003)]
-  Compiler --> QA[Artefact QA & Determinism Harness]
-  QA --> Transparency[Transparency Log]
-  Transparency --> Registry[Registry Publish]
-  QA --> Notifications[Notification Hub]
-  DatasetFetcher[Dataset Fetcher] --> Orchestrator
+  Watcher["Snapshot Watcher"] --> Orchestrator["Build Orchestrator"]
+  Orchestrator --> Compiler["Compiler (ADR-RTGF-003)"]
+  Compiler --> QA["Artefact QA & Determinism Harness"]
+  QA --> Transparency["Transparency Log"]
+  Transparency --> Registry["Registry Publish"]
+  QA --> Notifications["Notification Hub"]
+  DatasetFetcher["Dataset Fetcher"] --> Orchestrator
 ```
 
 - **Snapshot Watcher:** detect new/updated snapshots, validate signatures/hashes.  
