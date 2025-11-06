@@ -1,93 +1,105 @@
-# ADR-RTGF-005: Verification API & Error Taxonomy — Rev for Acceptance
+# ADR-RTGF-005: Verification API & Error Taxonomy
 
-**Status:** Proposed → *Ready for Acceptance review*  
+**Status:** Accepted  
 **Date:** 2025-11-02  
 **Decision Makers:** RTGF Working Group  
-**Owner:** RTGF Working Group  
-**Target Acceptance:** 2026-01-31  
-**Related ADRs:** ADR-RTGF-001, ADR-RTGF-002
+**Owner:** Verification Service Team  
+**Related ADRs:** ADR-RTGF-001 (Policy Source Matrix), ADR-RTGF-002 (Sanctions Hashing), ADR-RTGF-004 (Token Encodings), ADR-RTGF-006 (Trust Model)
+
+**Planned Tests:** RTGF-CT-40, RTGF-CT-41, RTGF-CT-42, RTGF-CT-43, RTGF-CT-44
 
 ---
 
 ## 1. Purpose & Scope
-Define the RTGF verification service contract, including REST interfaces, error taxonomy, determinism requirements, and operational SLOs. The service validates tokens (RMT/IMT/CORT/PSRT) against revocation data, consents, and cryptographic proofs for routers, auditors, and corridor partners.
+Define the RTGF verification service contract: REST endpoints, deterministic response semantics, error taxonomy, and observability. The service validates RMT/IMT/CORT/PSRT tokens against canonical hashes, signatures, revocation state, and (optionally) policy predicates so corridor partners and auditors can rely on a single verification authority.
 
-## 2. Architecture Overview
+## 2. Decision
+Adopt a layered verification service with the following flow:
+
+```mermaid
+flowchart LR
+  Client --> Validator[Request Validator]
+  Validator --> Resolver[Token Resolver]
+  Resolver --> Revocation[Revocation Checker]
+  Revocation --> PPE[Policy Evaluator]
+  PPE --> Decision[Decision Engine]
+  Decision --> Serializer[Response Serializer]
 ```
-Verifier API (HTTP) → Request Validator → Token Resolver → Revocation Checker
-                                            ↓
-                                   Policy Evaluator (PPE)
-                                            ↓
-                                       Decision Engine → Response Serializer
-```
-- **Request Validator:** enforces schema, required token URIs, and auth headers.  
-- **Token Resolver:** pulls canonical token JSON from Registry or cache.  
-- **Revocation Checker:** validates revEpoch vs current state; consults transparency log when needed.  
-- **Policy Evaluator:** optional inline PPE evaluation for runtime decisions (future).  
-- **Decision Engine:** maps results to `Valid`, `Reason`, and control requirements; logs audit trail.
+
+- **Request Validator:** enforce schema, required token URIs, authentication (mTLS/OAuth2).  
+- **Token Resolver:** retrieve canonical token JSON from registry/cache; validate canonical hash.  
+- **Revocation Checker:** compare `revEpoch` against revocation service; consult transparency proofs when supplied.  
+- **Policy Evaluator:** (optional) run PPE evaluation using predicate set/eval plan for runtime decisions.  
+- **Decision Engine:** collate evidence, produce deterministic `{Valid, Reason, RevEpoch, Controls}` response, audit log entry.  
+- **Response Serializer:** emit canonical JSON (stable ordering, RFC 8792).  
+- Rate limiting and circuit breaking wrap the entire pipeline to protect shared infrastructure.
 
 ## 3. Determinism & Provenance
-- Responses must be deterministic for identical inputs: `Valid`, `Reason`, `RevEpoch`.  
-- All token payloads validated using canonical hash; mismatches flagged.  
-- `RevEpoch` returned in responses is the current monotonic counter.  
-- Audit log entries reference request ID, token URIs, hashes, and resolver source.  
-- Idempotent POST `/verify` with same payload yields identical JSON (ordering, formatting).
+- Identical inputs produce identical responses (field order, value casing, numeric precision).  
+- Token payloads validated via canonical hash before use; mismatches flagged (`RTGF_TOKEN_CANONICAL_MISMATCH`).  
+- `revEpoch` returned equals current revocation counter at decision time.  
+- Audit log: request ID, client ID, token URIs, digests, decision, latency, revocation state.  
+- Idempotent POST `/verify` requests (same body + `Idempotency-Key`) produce same response and telemetry.
 
 ## 4. Security & Trust
-- API served over mTLS/TLS 1.3 with client certs for corridor partners; alt: OAuth2 for read-only endpoints.  
-- Tokens retrieved from registry over mTLS; caches validate signature before storing.  
-- Rate limiting per client; fail-closed on token fetch failures or revocation service timeouts.  
-- Input sanitisation prevents injection; error responses exclude sensitive data.
+- TLS 1.3 required; corridor partners use mTLS. Read-only clients may use OAuth2 client credentials.  
+- Token retrieval performed over mTLS; cached entries validated before reuse.  
+- Rate limiting per client; fail closed on registry or revocation timeouts.  
+- Inputs sanitised; responses omit sensitive internals.  
+- JWKS rotation monitored; unknown `kid` triggers fetch and failure if unresolved.
 
 ## 5. Error Taxonomy
-| Code | Condition | Action |
-|------|----------|--------|
-| RTGF_VERIFY_MISSING_TOKEN | Required token URI absent | return 400 |
-| RTGF_VERIFY_TOKEN_NOT_FOUND | Registry missing token | return 404 |
-| RTGF_VERIFY_SIGNATURE_INVALID | Token signature fail | return 422 |
-| RTGF_VERIFY_REVOKED | Token revoked/stale revEpoch | return 200 with `Valid=false` |
-| RTGF_VERIFY_INTERNAL | Unexpected failure | return 500, alert SRE |
-| RTGF_VERIFY_RATE_LIMIT | Throttle triggered | return 429 |
+| Code | HTTP | Condition | Action |
+|------|------|----------|--------|
+| `RTGF_VERIFY_MISSING_TOKEN` | 400 | Required token URI absent/blank | Return Problem Details; client resubmits |
+| `RTGF_VERIFY_TOKEN_NOT_FOUND` | 404 | Registry missing token | Problem Details with advice to refresh cache |
+| `RTGF_VERIFY_SIGNATURE_INVALID` | 422 | Token signature invalid | Reject; advise JWKS refresh |
+| `RTGF_VERIFY_REVOKED` | 200 | Token revoked / stale `revEpoch` | Return `Valid=false`, include reason |
+| `RTGF_VERIFY_RATE_LIMIT` | 429 | Rate limit triggered | Return `Retry-After`, recommend backoff |
+| `RTGF_VERIFY_INTERNAL` | 500 | Unexpected error | Fail closed; alert SRE |
+
+Problem Details responses include `type`, `title`, `status`, `detail`, `code`, `instance`.
 
 ## 6. Metrics & SLOs
 | Metric | Target | Notes |
-|--------|--------|------|
-| Verify latency | ≤ 100 ms P95 | assuming cached tokens |
-| Availability | ≥ 99.95 % | measured monthly |
-| Rate-limit accuracy | ≤ 1 % false positives | track per client |
-| Error budget | ≤ 0.1 % 5xx | across rolling 30 days |
+|--------|--------|-------|
+| `rtgf_verify_latency_ms_bucket` | ≤ 100 ms P95 | assuming cached tokens |
+| `rtgf_verify_requests_total{result}` | 100% tagged responses | success vs failure |
+| Availability | ≥ 99.95% monthly | tracked via SLO tooling |
+| Error budget | ≤ 0.1% 5xx | rolling 30 days |
+| Rate-limit accuracy | ≤ 1% false positives | per client |
 
 ## 7. Interfaces & Integration
 | Dependency | Direction | Purpose |
 |------------|-----------|---------|
-| RTGF Registry | inbound | Fetch tokens, JWKS |
-| Revocation service | inbound | Current revEpoch, revocation proofs |
-| PPE Evaluator | outbound | Execute predicate decisions (future integration) |
-| Observability (Prometheus, OTEL) | outbound | Metrics, traces |
-| Transparency log | inbound/outbound | Validate token hash vs log entries |
+| RTGF Registry | inbound | Token + JWKS retrieval |
+| Revocation service | inbound | Current `revEpoch`, revocation proofs |
+| PPE Evaluator | outbound | Execute predicate decisions (when enabled) |
+| Transparency log | inbound | Validate hash linkage / revocation lineage |
+| Observability stack | outbound | Emit metrics, traces, logs |
 
-## 8. Metrics & Observability
-- Prometheus: `rtgf_verify_latency_ms_bucket`, `rtgf_verify_requests_total{result,code}`, `rtgf_verify_cache_hits_total`.  
-- Logs: request ID, client ID, token URIs, decision, reasons.  
-- OpenTelemetry span `rtgf.verify.request` with child spans for token resolve, revocation check.
+## 8. Observability
+- Prometheus: `rtgf_verify_latency_ms_bucket`, `rtgf_verify_requests_total{result,code}`, `rtgf_verify_cache_hits_total`, `rtgf_verify_rate_limit_total{client}`.  
+- Logs: structured JSON including request ID, client ID, token URIs, decision, reason code, latency.  
+- OpenTelemetry: parent span `rtgf.verify.request` with child spans for resolver, revocation, PPE evaluation.
 
-## 9. Acceptance Tests
+## 9. Planned Tests
 | Test ID | Scenario | Expected Outcome |
 |---------|----------|------------------|
 | RTGF-CT-40 | Valid token set | 200, `Valid=true`, revEpoch current |
-| RTGF-CT-41 | Missing RMT URI | 400 with `RTGF_VERIFY_MISSING_TOKEN` |
-| RTGF-CT-42 | Revoked token | 200, `Valid=false`, reason contains `token_revoked` |
-| RTGF-CT-43 | Signature invalid | 422 with `RTGF_VERIFY_SIGNATURE_INVALID` |
-| RTGF-CT-44 | Rate-limit scenario | 429 returned, metrics incremented |
+| RTGF-CT-41 | Missing RMT URI | 400 Problem Details `RTGF_VERIFY_MISSING_TOKEN` |
+| RTGF-CT-42 | Revoked token | 200, `Valid=false`, reason includes `RTGF_VERIFY_REVOKED` |
+| RTGF-CT-43 | Signature invalid | 422 Problem Details `RTGF_VERIFY_SIGNATURE_INVALID` |
+| RTGF-CT-44 | Rate limit scenario | 429 with `Retry-After`; metrics increment |
 
 ## 10. Acceptance Criteria
-1️⃣ `/verify` responses deterministic and conform to schema; CT-40..44 pass.  
-2️⃣ Error taxonomy enforced in API responses and logs; 5xx budget maintained.  
-3️⃣ Revocation and signature checks fail closed; tokens fetched via secure channels.  
-4️⃣ Metrics, tracing, and audit logging implemented for observability.
+1. `/verify` responses deterministic, conform to schema, and CT-40..44 pass.  
+2. Error taxonomy enforced in API responses, logs, and metrics; 5xx budget maintained.  
+3. Revocation checks, canonical hash validation, and signature verification fail closed.  
+4. Observability (metrics, traces, logs) deployed and integrated with alerting.
 
-## Consequences
-- ✅ Unified verification API enables corridor partners and auditors to rely on consistent semantics.  
-- ✅ Clear error taxonomy accelerates troubleshooting and compliance validation.  
-- ⚠️ Strong security posture (mTLS, rate limits) increases integration effort for third parties.  
-- ⚠️ Deterministic responses require careful cache management and version control.
+## 11. Consequences
+- ✅ Consistent verification semantics for corridor partners and auditors.  
+- ✅ Clear error taxonomy accelerates troubleshooting and governance reporting.  
+- ⚠️ Strong security (mTLS, rate limiting) raises integration complexity.  
+- ⚠️ Deterministic responses require careful cache/version management; stale data triggers false negatives.
