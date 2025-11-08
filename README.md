@@ -34,7 +34,7 @@ RTGF transforms *policy snapshots* published by regulators into signed, machine-
 | `rtgf-verify-lib/` | Verification SDKs (Go / TypeScript / Python adapters) for runtime validation. |
 | `shared/ppe-schemas/` | Shared JSON-Schema definitions (predicates, evaluation plans, operators). |
 | `examples/` | Sample policies and generated tokens (e.g., EU↔SG corridor). |
-| `docs/` | Architecture notes, ADRs, OpenAPI specs, policy source matrix, and Internet-Drafts. |
+| `docs/` | Architecture notes, ADRs, OpenAPI specs, policy source matrix, and Internet-Drafts (see `docs/disclosure-proof-api.md` for RAG disclosure log interfaces). |
 | `docs/policy/` | Policy source ingestion matrix, big-picture workflow, developer guide. |
 | `docs/corridors/` | Corridor process, playbooks, templates, metrics, and workflow changelog. |
 
